@@ -15,7 +15,9 @@ export function buildVCard(data: CardData): string {
   const escapedName = escapeVCardValue(displayName);
   const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${escapedName};;;;`, `FN:${escapedName}`];
   if (contact.title) lines.push(`TITLE:${escapeVCardValue(contact.title)}`);
-  if (contact.org) lines.push(`ORG:${escapeVCardValue(contact.org)}`);
+  if (contact.org || contact.department) {
+    lines.push(`ORG:${escapeVCardValue(contact.org || "")}${contact.department ? `;${escapeVCardValue(contact.department)}` : ""}`);
+  }
   for (const phone of contact.phones || []) {
     lines.push(`TEL;TYPE=${escapeVCardValue((phone.type || "other").toUpperCase())}:${escapeVCardValue(phone.value)}`);
   }
@@ -28,6 +30,7 @@ export function buildVCard(data: CardData): string {
   for (const url of contact.urls || []) {
     lines.push(`URL;TYPE=${escapeVCardValue((url.label || "Website").toUpperCase())}:${escapeVCardValue(url.value)}`);
   }
+  if (contact.note) lines.push(`NOTE:${escapeVCardValue(contact.note)}`);
   lines.push("END:VCARD");
   return lines.join("\r\n");
 }

@@ -1,18 +1,21 @@
-import type { CardAsset, CardData, CardTheme, ContactInfo, ContactValue, PhotoTransform } from "./crypto";
+import { CARD_THEMES, CARD_THEME_VALUES, type CardAsset, type CardData, type CardTheme, type ContactInfo, type ContactValue, type PhotoTransform } from "./crypto";
 import { normalizePhotoTransform } from "./crypto";
 import type { ReceivedEntry } from "./storage";
 import { esc, isHexColor, isLinkableSocialValue, toSocialHref } from "./dom";
 import { t } from "./i18n";
 
 export function cardThemes(): { value: CardTheme; label: string }[] {
-  return [
-    { value: "beige", label: t("themeBeige") },
-    { value: "teal", label: t("themeDeepTeal") },
-    { value: "ink", label: t("themeBlack") },
-  ];
+  const labels: Partial<Record<CardTheme, string>> = { beige: t("themeBeige"), teal: t("themeDeepTeal"), ink: t("themeBlack") };
+  return CARD_THEME_VALUES
+    .filter((value) => value !== "custom")
+    .map((value) => ({ value, label: labels[value] || value }));
 }
 
-export function roleLine(data: { title?: string; org?: string }): string {
+export function roleLine(data: { title?: string; org?: string; department?: string }): string {
+  return [data.title, data.department, data.org].filter(Boolean).join(" · ");
+}
+
+function cardFaceRoleLine(data: { title?: string; org?: string }): string {
   return [data.title, data.org].filter(Boolean).join(" · ");
 }
 
@@ -28,6 +31,7 @@ export interface CardFaceData {
     fn: string;
     title?: string;
     org?: string;
+    department?: string;
   };
   profile?: {
     theme?: CardTheme;
@@ -70,7 +74,7 @@ export function cardFaceHtml(data: CardFaceData | undefined, opts: CardFaceOpts 
   const name = data && data.contact.fn ? data.contact.fn : "";
   const nameHtml = name ? esc(name) : esc(t("myCard"));
   const nameClass = name ? "card-name" : "card-name placeholder";
-  const role = roleLine(data?.contact || {});
+  const role = cardFaceRoleLine(data?.contact || {});
   const theme = (data && data.profile?.theme) || "beige";
   // No corner mark by default — the centered name already identifies the
   // card. A corner label is only worth showing where it's doing real work:
@@ -199,7 +203,7 @@ export function receivedEntryFaceHtml(entry: ReceivedEntry, isFront: boolean): s
 // so recognized identity fields would otherwise not be shown anywhere
 // at all. Only renderPhotoDetail (views.ts) needs this.
 export function identitySummaryHtml(data: ContactInfo): string {
-  const role = roleLine(data);
+  const role = cardFaceRoleLine(data);
   if (!data.fn && !role) return "";
   return `
     <div class="sheet-identity panel">
@@ -211,6 +215,9 @@ export function identitySummaryHtml(data: ContactInfo): string {
 
 export function contactSheetHtml(data: CardData): string {
   const rows: string[] = [];
+  if (data.contact.department) {
+    rows.push(`<div class="sheet-row"><dt>${esc(t("department"))}</dt><dd>${esc(data.contact.department)}</dd></div>`);
+  }
   for (const phone of data.contact.phones || []) {
     rows.push(`<div class="sheet-row"><dt>${esc(t("phone"))}</dt><dd><a href="tel:${esc(phone.value)}">${esc(phone.value)}</a></dd></div>`);
   }
@@ -225,6 +232,9 @@ export function contactSheetHtml(data: CardData): string {
       ? `<a href="${esc(toSocialHref(url.value))}" target="_blank" rel="noopener">${esc(url.value)}</a>`
       : esc(url.value);
     rows.push(`<div class="sheet-row"><dt>${esc(url.label || "Website")}</dt><dd>${shown}</dd></div>`);
+  }
+  if (data.contact.note) {
+    rows.push(`<div class="sheet-row"><dt>${esc(t("note"))}</dt><dd>${esc(data.contact.note)}</dd></div>`);
   }
   if (!rows.length) return "";
   return `<dl class="sheet panel">${rows.join("")}</dl>`;
@@ -276,7 +286,7 @@ export function collectFormData(form: HTMLFormElement): Omit<CardData, "id"> {
     })
     .filter((item): item is ContactValue => item !== null);
   const themeValue = String(fd.get("theme") || "beige");
-  const theme = (["beige", "teal", "ink", "custom"].includes(themeValue) ? themeValue : "beige") as CardTheme;
+  const theme = CARD_THEMES.has(themeValue as CardTheme) ? themeValue as CardTheme : "beige";
   const customColorValue = String(fd.get("customColor") || "");
   const customColor = theme === "custom" && isHexColor(customColorValue) ? customColorValue : undefined;
   const phones = collectValues("phone");
@@ -289,6 +299,8 @@ export function collectFormData(form: HTMLFormElement): Omit<CardData, "id"> {
       fn: String(fd.get("fn") || "").trim(),
       title: String(fd.get("title") || "").trim(),
       org: String(fd.get("org") || "").trim(),
+      department: String(fd.get("department") || "").trim(),
+      note: String(fd.get("note") || "").trim(),
       phones,
       emails,
       addresses,

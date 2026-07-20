@@ -41,6 +41,16 @@
           "maxLength": 2048,
           "description": "Organization name, equivalent to vCard ORG."
         },
+        "department": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Organization unit/department, exported as the second component of vCard ORG."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Free-form note, equivalent to vCard NOTE."
+        },
         "phones": {
           "type": "array",
           "maxItems": 24,

@@ -20,15 +20,17 @@ npm run build
 - `src/card-view.ts` — card face/contact-sheet rendering shared across views.
 - `src/views.ts` — screen rendering, menus, photo capture, and `initApp`.
 - `src/main.ts` — calls `initApp` and re-runs it on `hashchange`.
-- `src/i18n.ts` — UI string dictionary, 9 locales.
+- `src/i18n.ts` — UI string dictionary, 14 locales.
 
 ## Deployment Notes
 
-The `main` branch is the source for the currently deployed app.
+The `release` branch is the publishing branch connected to Cloudflare Pages
+automatic deployment. The `main` branch is the primary development branch;
+after an iteration is stable, merge or promote it to `release` to publish.
 
 The app deploys as static files. `public/_headers` defines cache policy:
 HTML is revalidated, hashed Vite assets are immutable, and public assets use
 bounded cache lifetimes. Social preview metadata points at a versioned PNG.
 
 GitHub Actions runs typecheck, tests, and build for app changes. Cloudflare
-Pages is expected to handle deployment from the connected GitHub branch.
+Pages deploys from the connected `release` branch.

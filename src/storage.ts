@@ -1,5 +1,5 @@
 import { normalizeCardData, normalizePhotoTransform, type CardAsset, type CardData, type PhotoTransform } from "./crypto";
-import { isUuid } from "./validators.ts";
+import { isImageDataUrl, isUuid } from "./validators.ts";
 
 // Local-only storage. Authored Mine cards and Received Cards both live in
 // IndexedDB so they share one quota/error/migration model. Small device-local
@@ -7,6 +7,12 @@ import { isUuid } from "./validators.ts";
 // localStorage.
 
 export interface MineCard extends CardData {
+  updatedAt: string;
+}
+
+export interface DeletedCardEntry {
+  id: string;
+  kind: "mine" | "received";
   updatedAt: string;
 }
 
@@ -25,10 +31,6 @@ function cleanIsoDate(value: unknown): string | null {
   return Number.isNaN(Date.parse(iso)) ? null : iso;
 }
 
-function isImageDataUrl(value: unknown): value is string {
-  return typeof value === "string" && /^data:image\/[-+.\w]+;base64,/i.test(value);
-}
-
 function normalizeMineCard(value: unknown): MineCard | null {
   if (!isRecord(value)) return null;
   const data = normalizeCardData(value);
@@ -41,15 +43,17 @@ function normalizeReceivedEntry(value: unknown): ReceivedEntry | null {
   if (!isRecord(value)) return null;
   const id = cleanString(value.id, 128)?.trim();
   const receivedAt = cleanIsoDate(value.receivedAt);
-  if (!id || !isUuid(id) || !receivedAt) return null;
+  const updatedAt = cleanIsoDate(value.updatedAt) || receivedAt;
+  if (!id || !isUuid(id) || !receivedAt || !updatedAt) return null;
 
   const data = normalizeCardData(value.data);
-  return data ? { id, receivedAt, data } : null;
+  return data ? { id, receivedAt, updatedAt, data } : null;
 }
 
 export interface ReceivedEntry {
   id: string;
   receivedAt: string;
+  updatedAt: string;
   data: CardData;
 }
 
@@ -61,19 +65,23 @@ const AI_DOWNLOADED_LANGUAGES_KEY = "mycard.aiDownloadedLanguages";
 const ONBOARDING_SEEN_KEY = "mycard.onboardingSeen";
 
 const CARD_DB_NAME = "mycard";
-const CARD_DB_VERSION = 3;
+const CARD_DB_VERSION = 4;
 const MINE_STORE = "mine";
 const RECEIVED_STORE = "received";
 const ASSET_STORE = "assets";
+const DELETED_CARD_STORE = "deletedCards";
 
-interface LocalAssetRecord {
+export interface LocalAssetRecord {
   id: string;
   mediaType: string;
   dataUrl: string;
 }
 
+let cardDbPromise: Promise<IDBDatabase> | null = null;
+
 function openCardDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (cardDbPromise) return cardDbPromise;
+  cardDbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(CARD_DB_NAME, CARD_DB_VERSION);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(MINE_STORE)) {
@@ -85,8 +93,69 @@ function openCardDb(): Promise<IDBDatabase> {
       if (!req.result.objectStoreNames.contains(ASSET_STORE)) {
         req.result.createObjectStore(ASSET_STORE, { keyPath: "id" });
       }
+      if (!req.result.objectStoreNames.contains(DELETED_CARD_STORE)) {
+        req.result.createObjectStore(DELETED_CARD_STORE, { keyPath: "key" });
+      }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => {
+        db.close();
+        cardDbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      cardDbPromise = null;
+      reject(req.error);
+    };
+  });
+  return cardDbPromise;
+}
+
+function deletedCardKey(kind: DeletedCardEntry["kind"], id: string): string {
+  return `${kind}:${id}`;
+}
+
+function normalizeDeletedCardEntry(value: unknown): DeletedCardEntry | null {
+  if (!isRecord(value)) return null;
+  const id = cleanString(value.id, 128)?.trim();
+  const kind = value.kind;
+  const updatedAt = cleanIsoDate(value.updatedAt);
+  if (!id || !isUuid(id) || (kind !== "mine" && kind !== "received") || !updatedAt) return null;
+  return { id, kind, updatedAt };
+}
+
+async function putDeletedCardEntry(entry: DeletedCardEntry): Promise<void> {
+  const normalized = normalizeDeletedCardEntry(entry);
+  if (!normalized) return;
+  const db = await openCardDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DELETED_CARD_STORE, "readwrite");
+    tx.objectStore(DELETED_CARD_STORE).put({ ...normalized, key: deletedCardKey(normalized.kind, normalized.id) });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function clearDeletedCardEntry(kind: DeletedCardEntry["kind"], id: string): Promise<void> {
+  const db = await openCardDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DELETED_CARD_STORE, "readwrite");
+    tx.objectStore(DELETED_CARD_STORE).delete(deletedCardKey(kind, id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadDeletedCardEntries(): Promise<DeletedCardEntry[]> {
+  const db = await openCardDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(DELETED_CARD_STORE, "readonly").objectStore(DELETED_CARD_STORE).getAll();
+    req.onsuccess = () => {
+      const rows = Array.isArray(req.result) ? req.result : [];
+      resolve(rows.map(normalizeDeletedCardEntry).filter((entry): entry is DeletedCardEntry => entry !== null));
+    };
     req.onerror = () => reject(req.error);
   });
 }
@@ -105,15 +174,34 @@ export async function loadMine(): Promise<MineCard[]> {
 
 export async function saveMine(list: MineCard[]): Promise<void> {
   const normalized = list.map(normalizeMineCard).filter((card): card is MineCard => card !== null);
+  const previous = await loadMine();
+  const nextIds = new Set(normalized.map((card) => card.id));
+  const deleted = previous.filter((card) => !nextIds.has(card.id));
+  const deletedAt = new Date().toISOString();
   const db = await openCardDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(MINE_STORE, "readwrite");
+    const tx = db.transaction([MINE_STORE, DELETED_CARD_STORE], "readwrite");
     const store = tx.objectStore(MINE_STORE);
     store.clear();
     for (const card of normalized) store.put(card);
+    const deletedStore = tx.objectStore(DELETED_CARD_STORE);
+    for (const card of normalized) deletedStore.delete(deletedCardKey("mine", card.id));
+    for (const card of deleted) deletedStore.put({ key: deletedCardKey("mine", card.id), id: card.id, kind: "mine", updatedAt: deletedAt });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export async function upsertMineCard(card: MineCard): Promise<boolean> {
+  const normalized = normalizeMineCard(card);
+  if (!normalized) return false;
+  const mine = await loadMine();
+  const idx = mine.findIndex((item) => item.id === normalized.id);
+  if (idx >= 0) mine[idx] = normalized;
+  else mine.push(normalized);
+  await saveMine(mine);
+  await clearDeletedCardEntry("mine", normalized.id);
+  return true;
 }
 
 export function loadActiveMineId(): string {
@@ -152,15 +240,31 @@ async function putReceivedEntry(entry: ReceivedEntry): Promise<void> {
   });
 }
 
-export async function deleteReceivedEntry(id: string): Promise<void> {
+export async function upsertReceivedEntry(entry: ReceivedEntry): Promise<boolean> {
+  const normalized = normalizeReceivedEntry(entry);
+  if (!normalized) return false;
+  await putReceivedEntry(normalized);
+  await clearDeletedCardEntry("received", normalized.id);
+  return true;
+}
+
+export async function deleteMineCard(id: string, deletedAt = new Date().toISOString()): Promise<void> {
+  const mine = await loadMine();
+  await saveMine(mine.filter((card) => card.id !== id));
+  await putDeletedCardEntry({ id, kind: "mine", updatedAt: deletedAt });
+  if (loadActiveMineId() === id) clearActiveMineId();
+}
+
+export async function deleteReceivedEntry(id: string, deletedAt = new Date().toISOString()): Promise<void> {
   const entry = (await loadReceived()).find((item) => item.id === id);
   const assetIds = entry?.data.assets?.map((asset) => asset.sourceRef?.id).filter((assetId): assetId is string => Boolean(assetId)) || [];
   const db = await openCardDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([RECEIVED_STORE, ASSET_STORE], "readwrite");
+    const tx = db.transaction([RECEIVED_STORE, ASSET_STORE, DELETED_CARD_STORE], "readwrite");
     tx.objectStore(RECEIVED_STORE).delete(id);
     const assetStore = tx.objectStore(ASSET_STORE);
     for (const assetId of assetIds) assetStore.delete(assetId);
+    tx.objectStore(DELETED_CARD_STORE).put({ key: deletedCardKey("received", id), id, kind: "received", updatedAt: deletedAt });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -183,7 +287,9 @@ export async function addReceived(data: CardData): Promise<void> {
   if (!normalized) return;
   const existing = await findReceivedContactEntry(normalized.id);
   const id = existing ? existing.id : crypto.randomUUID();
-  await putReceivedEntry({ id, receivedAt: new Date().toISOString(), data: normalized });
+  const now = new Date().toISOString();
+  await putReceivedEntry({ id, receivedAt: existing?.receivedAt || now, updatedAt: now, data: normalized });
+  await clearDeletedCardEntry("received", id);
 }
 
 // Returns the new entry's id so the caller can route straight into the
@@ -201,9 +307,11 @@ export async function addReceivedPhoto(imageDataUrl: string, previewDataUrl?: st
     ...(isImageDataUrl(previewDataUrl) ? { previewDataUrl } : {}),
     localOnly: true,
   };
+  const now = new Date().toISOString();
   const entry: ReceivedEntry = {
     id,
-    receivedAt: new Date().toISOString(),
+    receivedAt: now,
+    updatedAt: now,
     data: {
       v: 2,
       id,
@@ -239,17 +347,31 @@ export async function loadCardAssetDataUrl(asset: CardAsset): Promise<string | u
   });
 }
 
-export async function saveCardAssetPreview(entryId: string, assetId: string, previewDataUrl: string): Promise<boolean> {
-  if (!isImageDataUrl(previewDataUrl)) return false;
-  const entry = await loadReceivedEntry(entryId);
-  if (!entry) return false;
-  const assets = (entry.data.assets || []).map((asset) => (
-    asset.id === assetId ? { ...asset, previewDataUrl } : asset
-  ));
-  const normalized = normalizeCardData({ ...entry.data, assets });
-  if (!normalized) return false;
-  await putReceivedEntry({ ...entry, data: normalized });
-  return true;
+export async function loadLocalAssetRecord(id: string): Promise<LocalAssetRecord | undefined> {
+  const db = await openCardDb();
+  return new Promise<LocalAssetRecord | undefined>((resolve, reject) => {
+    const req = db.transaction(ASSET_STORE, "readonly").objectStore(ASSET_STORE).get(id);
+    req.onsuccess = () => {
+      const result = req.result;
+      if (isRecord(result) && typeof result.id === "string" && typeof result.mediaType === "string" && isImageDataUrl(result.dataUrl)) {
+        resolve({ id: result.id, mediaType: result.mediaType, dataUrl: result.dataUrl });
+      } else {
+        resolve(undefined);
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveLocalAssetRecord(record: LocalAssetRecord): Promise<boolean> {
+  if (!isUuid(record.id) || typeof record.mediaType !== "string" || !isImageDataUrl(record.dataUrl)) return false;
+  const db = await openCardDb();
+  return new Promise<boolean>((resolve, reject) => {
+    const tx = db.transaction(ASSET_STORE, "readwrite");
+    tx.objectStore(ASSET_STORE).put(record);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 async function loadReceivedEntry(id: string): Promise<ReceivedEntry | undefined> {
@@ -261,34 +383,66 @@ async function loadReceivedEntry(id: string): Promise<ReceivedEntry | undefined>
   });
 }
 
+async function updateReceivedEntryInTransaction(id: string, update: (entry: ReceivedEntry) => ReceivedEntry | null): Promise<boolean> {
+  const db = await openCardDb();
+  return new Promise<boolean>((resolve, reject) => {
+    let saved = false;
+    const tx = db.transaction(RECEIVED_STORE, "readwrite");
+    const store = tx.objectStore(RECEIVED_STORE);
+    const req = store.get(id);
+    req.onsuccess = () => {
+      try {
+        const entry = normalizeReceivedEntry(req.result);
+        const next = entry ? normalizeReceivedEntry(update(entry)) : null;
+        if (!next) return;
+        store.put(next);
+        saved = true;
+      } catch (error) {
+        tx.abort();
+        reject(error);
+      }
+    };
+    tx.oncomplete = () => resolve(saved);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+export async function saveCardAssetPreview(entryId: string, assetId: string, previewDataUrl: string): Promise<boolean> {
+  if (!isImageDataUrl(previewDataUrl)) return false;
+  return updateReceivedEntryInTransaction(entryId, (entry) => {
+    const assets = (entry.data.assets || []).map((asset) => (
+      asset.id === assetId ? { ...asset, previewDataUrl } : asset
+    ));
+    const normalized = normalizeCardData({ ...entry.data, assets });
+    return normalized ? { ...entry, data: normalized } : null;
+  });
+}
+
 // Updates the same CardData that carries the cardPhoto asset. The original
 // photo remains in assets; OCR only replaces the contact/profile fields.
 export async function saveRecognizedPhotoData(id: string, data: CardData | undefined): Promise<boolean> {
-  const entry = await loadReceivedEntry(id);
-  if (!entry || !data) return false;
-  const normalized = normalizeCardData({ ...data, id, assets: entry.data.assets });
-  if (!normalized) return false;
-  await putReceivedEntry({ ...entry, data: normalized });
-  return true;
+  if (!data) return false;
+  return updateReceivedEntryInTransaction(id, (entry) => {
+    const normalized = normalizeCardData({ ...data, id, assets: entry.data.assets });
+    return normalized ? { ...entry, updatedAt: new Date().toISOString(), data: normalized } : null;
+  });
 }
 
 export async function savePhotoTransform(id: string, assetId: string, transform: PhotoTransform): Promise<boolean> {
-  const entry = await loadReceivedEntry(id);
-  if (!entry) return false;
   const safeTransform = normalizePhotoTransform(transform);
   if (!safeTransform) return false;
-  const assets = (entry.data.assets || []).map((asset) => (
-    asset.kind === "cardPhoto" && asset.id === assetId ? { ...asset, transform: safeTransform } : asset
-  ));
-  if (!assets.some((asset) => asset.kind === "cardPhoto" && asset.id === assetId)) return false;
-  const normalized = normalizeCardData({ ...entry.data, assets });
-  if (!normalized) return false;
-  await putReceivedEntry({ ...entry, data: normalized });
-  return true;
+  return updateReceivedEntryInTransaction(id, (entry) => {
+    const assets = (entry.data.assets || []).map((asset) => (
+      asset.kind === "cardPhoto" && asset.id === assetId ? { ...asset, transform: safeTransform } : asset
+    ));
+    if (!assets.some((asset) => asset.kind === "cardPhoto" && asset.id === assetId)) return null;
+    const normalized = normalizeCardData({ ...entry.data, assets });
+    return normalized ? { ...entry, updatedAt: new Date().toISOString(), data: normalized } : null;
+  });
 }
 
-// This only wires selection + persistence, not full retranslation of the
-// UI strings.
+// Display locales supported by Settings and i18n.ts.
 export interface LocaleOption {
   code: string;
   name: string;
@@ -298,11 +452,16 @@ export const LOCALES: LocaleOption[] = [
   { code: "en", name: "English" },
   { code: "zh-Hans", name: "简体中文" },
   { code: "zh-Hant", name: "繁體中文" },
+  { code: "ja", name: "日本語" },
+  { code: "ko", name: "한국어" },
+  { code: "id", name: "Bahasa Indonesia" },
+  { code: "ms", name: "Bahasa Melayu" },
+  { code: "th", name: "ไทย" },
+  { code: "vi", name: "Tiếng Việt" },
+  { code: "ta", name: "தமிழ்" },
   { code: "es", name: "Español" },
   { code: "fr", name: "Français" },
   { code: "de", name: "Deutsch" },
-  { code: "ja", name: "日本語" },
-  { code: "ko", name: "한국어" },
   { code: "pt", name: "Português" },
 ];
 
@@ -364,11 +523,16 @@ export const AI_LANGUAGES: AiLanguageOption[] = [
   { code: "eng", name: "English" },
   { code: "chi_sim", name: "简体中文" },
   { code: "chi_tra", name: "繁體中文" },
+  { code: "jpn", name: "日本語" },
+  { code: "kor", name: "한국어" },
+  { code: "ind", name: "Bahasa Indonesia" },
+  { code: "msa", name: "Bahasa Melayu" },
+  { code: "tha", name: "ไทย" },
+  { code: "vie", name: "Tiếng Việt" },
+  { code: "tam", name: "தமிழ்" },
   { code: "spa", name: "Español" },
   { code: "fra", name: "Français" },
   { code: "deu", name: "Deutsch" },
-  { code: "jpn", name: "日本語" },
-  { code: "kor", name: "한국어" },
   { code: "por", name: "Português" },
 ];
 
@@ -415,6 +579,11 @@ const LOCALE_AI_LANGUAGE: Record<string, string> = {
   ja: "jpn",
   ko: "kor",
   pt: "por",
+  ms: "msa",
+  ta: "tam",
+  th: "tha",
+  vi: "vie",
+  id: "ind",
 };
 
 export function defaultAiLanguagesForLocale(locale: string): string[] {

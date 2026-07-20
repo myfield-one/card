@@ -23,9 +23,11 @@ shared card contents. Full format spec: [`docs/data-model.md`](docs/data-model.m
 ## Docs
 
 - [`docs/data-model.md`](docs/data-model.md) — data model, storage, and share-link format.
+- [`docs/sync.md`](docs/sync.md) — encrypted multi-device sync design.
 - [`docs/api.md`](docs/api.md) — URL routing.
 - [`docs/dev.md`](docs/dev.md) — local development and deployment.
 - [`docs/plan.md`](docs/plan.md) — future work.
+- [`CHANGELOG.md`](CHANGELOG.md) — release notes.
 
 ## Development
 

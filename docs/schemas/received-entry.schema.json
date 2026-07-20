@@ -5,7 +5,7 @@
   "description": "One entry in the local Received Cards IndexedDB store (database \"mycard\", object store \"received\", keyPath \"id\"). Source of truth: src/storage.ts. Not served over HTTP.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "receivedAt", "data"],
+  "required": ["id", "receivedAt", "updatedAt", "data"],
   "properties": {
     "id": {
       "type": "string",
@@ -13,6 +13,7 @@
       "description": "Local IndexedDB key. Share-link contacts are deduped against CardData.id; locally captured photo cards use the same value as data.id."
     },
     "receivedAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
     "data": { "$ref": "card-data.schema.json" }
   }
 }

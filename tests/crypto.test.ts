@@ -20,6 +20,8 @@ test("normalizeCardData keeps v2 contact data and trims optional values", () => 
       fn: " ",
       title: " Founder ",
       org: " Example Inc. ",
+      department: " Research ",
+      note: " First computer programmer ",
       phones: [
         { type: "cell", value: "+1 555 0100" },
         { type: "mobile", value: " +1 555 0101 " },
@@ -37,6 +39,8 @@ test("normalizeCardData keeps v2 contact data and trims optional values", () => 
       fn: "",
       title: "Founder",
       org: "Example Inc.",
+      department: "Research",
+      note: "First computer programmer",
       phones: [
         { value: "+1 555 0100" },
         { type: "mobile", value: "+1 555 0101" },
@@ -55,6 +59,8 @@ test("normalizeCardData strips unsafe control characters from contact text", () 
     contact: {
       fn: "Ada\u0000 Lovelace\r\nCEO",
       org: "Example\u0007 Inc.",
+      department: "R&D\r\nTeam",
+      note: "Line 1\r\nLine 2",
       phones: [{ value: "+1 555\r0100" }],
     },
   });
@@ -62,6 +68,8 @@ test("normalizeCardData strips unsafe control characters from contact text", () 
   assert.deepEqual(data?.contact, {
     fn: "Ada Lovelace CEO",
     org: "Example Inc.",
+    department: "R&D Team",
+    note: "Line 1 Line 2",
     phones: [{ value: "+1 555 0100" }],
   });
 });

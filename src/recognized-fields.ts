@@ -23,6 +23,9 @@ export function fieldsToCardData(fields: RecognizedField[], id: string): CardDat
       case "title":
         data.contact.title = value;
         break;
+      case "department":
+        data.contact.department = value;
+        break;
       case "company":
         data.contact.org = value;
         break;
@@ -38,6 +41,9 @@ export function fieldsToCardData(fields: RecognizedField[], id: string): CardDat
       case "social":
         data.contact.urls!.push({ label: f.label || "Website", value });
         break;
+      case "note":
+        data.contact.note = value;
+        break;
       case "other":
         data.contact.addresses!.push({ type: "other", value });
         break;
@@ -50,10 +56,12 @@ export function cardDataToRecognizedFields(data: CardData): RecognizedField[] {
   const fields: RecognizedField[] = [];
   if (data.contact.fn) fields.push({ type: "name", value: data.contact.fn });
   if (data.contact.title) fields.push({ type: "title", value: data.contact.title });
+  if (data.contact.department) fields.push({ type: "department", value: data.contact.department });
   if (data.contact.org) fields.push({ type: "company", value: data.contact.org });
   for (const phone of data.contact.phones || []) fields.push({ type: "phone", value: phone.value, valueType: phone.type });
   for (const email of data.contact.emails || []) fields.push({ type: "email", value: email.value, valueType: email.type });
   for (const address of data.contact.addresses || []) fields.push({ type: "address", value: address.value, valueType: address.type });
   for (const url of data.contact.urls || []) fields.push({ type: "social", value: url.value, label: url.label });
+  if (data.contact.note) fields.push({ type: "note", value: data.contact.note });
   return fields;
 }

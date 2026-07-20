@@ -1,7 +1,7 @@
 import type { OcrLine } from "./ocr";
 import type { ContactValueType } from "./crypto";
 
-export type FieldType = "name" | "title" | "company" | "phone" | "email" | "address" | "social" | "other";
+export type FieldType = "name" | "title" | "department" | "company" | "phone" | "email" | "address" | "social" | "note" | "other";
 
 export interface RecognizedField {
   type: FieldType;

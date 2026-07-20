@@ -1,6 +1,8 @@
 export const stage = document.querySelector<HTMLDivElement>("#stage")!;
 const toastEl = document.querySelector<HTMLDivElement>("#toast")!;
 
+export { isHexColor } from "./validators.ts";
+
 export function esc(value: unknown): string {
   const div = document.createElement("div");
   div.textContent = value == null ? "" : String(value);
@@ -35,13 +37,6 @@ export function isLinkableSocialValue(value: string | undefined): boolean {
 // entered.
 export function toSocialHref(value: string): string {
   return isSafeUrl(value) ? value : `https://${value.trim()}`;
-}
-
-// Strict #rrggbb only — gates a custom card color before it's spliced into
-// a `style` attribute (see card-view.ts's cardFaceHtml), so a malformed
-// value from a decoded, untrusted share link can't break out of it.
-export function isHexColor(value: string | undefined): boolean {
-  return /^#[0-9a-f]{6}$/i.test(value || "");
 }
 
 let toastTimer: ReturnType<typeof setTimeout>;

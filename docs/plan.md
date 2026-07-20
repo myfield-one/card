@@ -10,10 +10,10 @@ Future plans:
 
 ## Encrypted Sync
 
-Add optional multi-device sync without changing the privacy boundary:
-plaintext and keys stay on user devices, while the platform stores and relays
-ciphertext only. This needs encrypted object schemas, local change tracking,
-device authorization, transport, and conflict handling.
+Add optional multi-device sync using the object model in
+[`sync.md`](sync.md). The first implementation should keep local IndexedDB as
+the app source of truth and sync encrypted `index:cards`, card records, and
+original image assets.
 
 ## Card Assets
 

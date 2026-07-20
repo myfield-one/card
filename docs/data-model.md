@@ -30,7 +30,9 @@ interface CardData {
 | --- | --- | --- |
 | `fn` | `FN` | May be empty before a photo card is recognized. |
 | `title` | `TITLE` | Optional. |
-| `org` | `ORG` | Optional. |
+| `org` | `ORG` | Optional organization name. |
+| `department` | `ORG` | Optional organization unit; exported as `ORG:Company;Department`. |
+| `note` | `NOTE` | Optional free-form note. |
 | `phones[]` | `TEL` | Multiple values supported. |
 | `emails[]` | `EMAIL` | Multiple values supported. |
 | `addresses[]` | `ADR` | Multiple free-text values supported. |
@@ -81,8 +83,9 @@ Card records live in IndexedDB:
 | Store | Shape |
 | --- | --- |
 | `mycard/mine` | `MineCard = CardData & { updatedAt: string }` |
-| `mycard/received` | `ReceivedEntry = { id, receivedAt, data: CardData }` |
+| `mycard/received` | `ReceivedEntry = { id, receivedAt, updatedAt, data: CardData }` |
 | `mycard/assets` | Local original image assets referenced by `sourceRef` |
+| `mycard/deletedCards` | Local sync tombstones for deleted mine/received entries |
 
 Small device-local preferences remain in `localStorage`, including active
 card id, locale, layout, onboarding state, and AI language state.
@@ -91,6 +94,9 @@ For share links, `ReceivedEntry.id` is deduped against `CardData.id`. For
 photo cards, `ReceivedEntry.id` and `CardData.id` are the same local UUID.
 OCR updates `data.contact` on the same entry while preserving the original
 `cardPhoto` asset.
+
+`receivedAt` is creation time. `updatedAt` changes when the received card's
+user-visible data changes and is used for sync conflict resolution.
 
 All storage reads normalize local data before use.
 

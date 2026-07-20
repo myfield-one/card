@@ -26,6 +26,7 @@ import {
   storeActiveMineId,
   clearActiveMineId,
   loadReceived,
+  deleteMineCard,
   deleteReceivedEntry,
   findReceivedContactEntry,
   addReceived,
@@ -52,6 +53,25 @@ import {
 import { warmUpOcrLanguages, recognizeCardImage, cropToCardFrame } from "./ocr";
 import { parseContactFields, type RecognizedField, type FieldType } from "./recognizer";
 import { cardDataToRecognizedFields, fieldsToCardData } from "./recognized-fields";
+import { buildPhotoCardsZip, myCardsVCard, receivedCardsVCard } from "./export-data";
+import {
+  authorizeCardSync,
+  clearCardSyncAuthorization,
+  connectCardSync,
+  handleCardSyncAuthCallback,
+} from "./sync/cloud";
+import type { createCardSyncController } from "./sync/card-sync-controller";
+
+type CurrentView =
+  | { kind: "mine-stack" }
+  | { kind: "mine-detail"; id: string }
+  | { kind: "received-list" }
+  | { kind: "received-detail"; id: string }
+  | { kind: "photo-detail"; id: string }
+  | { kind: "editing" }
+  | { kind: "other" };
+
+let currentView: CurrentView = { kind: "other" };
 
 /* ============ editor ============ */
 
@@ -62,6 +82,8 @@ function blankCardDraft(): Omit<MineCard, "id" | "updatedAt"> {
       fn: "",
       title: "",
       org: "",
+      department: "",
+      note: "",
       phones: [{ type: "mobile", value: "" }],
       emails: [{ type: "work", value: "" }],
       addresses: [{ type: "work", value: "" }],
@@ -71,7 +93,62 @@ function blankCardDraft(): Omit<MineCard, "id" | "updatedAt"> {
   };
 }
 
+type OptionalContactField = "department" | "note";
+
+function optionalContactFieldHtml(kind: OptionalContactField, value = ""): string {
+  const input = kind === "note"
+    ? `<textarea name="note" rows="3">${esc(value)}</textarea>`
+    : `<input name="department" value="${esc(value)}" autocomplete="organization" />`;
+  return `
+    <div class="field" data-optional-contact-field="${kind}">
+      <label>${esc(t(kind))}</label>
+      ${input}
+    </div>
+  `;
+}
+
+function addFieldMenuHtml(contact: MineCard["contact"]): string {
+  const hasDepartment = Boolean(contact.department);
+  const hasNote = Boolean(contact.note);
+  if (hasDepartment && hasNote) return "";
+  return `
+    <div class="add-field-block" id="optional-field-add-block">
+      <button type="button" class="add-social" id="optional-field-menu-btn">${esc(t("addField"))}</button>
+      <div class="add-field-menu" id="optional-field-menu" hidden>
+        ${hasDepartment ? "" : `<button type="button" data-add-optional-field="department">${esc(t("department"))}</button>`}
+        ${hasNote ? "" : `<button type="button" data-add-optional-field="note">${esc(t("note"))}</button>`}
+      </div>
+    </div>
+  `;
+}
+
+function positionOptionalFieldMenu(menu: HTMLElement, anchor: HTMLElement): void {
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft || 0;
+  const viewportTop = viewport?.offsetTop || 0;
+  const viewportWidth = viewport?.width || window.innerWidth;
+  const viewportHeight = viewport?.height || window.innerHeight;
+  const margin = 12;
+  const anchorRect = anchor.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const width = menuRect.width || 180;
+  const height = menuRect.height || 96;
+  const left = Math.min(
+    viewportLeft + viewportWidth - width - margin,
+    Math.max(viewportLeft + margin, viewportLeft + anchorRect.right - width),
+  );
+  const preferredTop = viewportTop + anchorRect.top - height - 8;
+  const fallbackTop = viewportTop + anchorRect.bottom + 8;
+  const maxTop = viewportTop + viewportHeight - height - margin;
+  const top = preferredTop >= viewportTop + margin
+    ? preferredTop
+    : Math.min(maxTop, Math.max(viewportTop + margin, fallbackTop));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
 export async function renderEditor(existing: MineCard | null): Promise<void> {
+  currentView = { kind: "editing" };
   const isNew = !existing;
   const data = existing || blankCardDraft();
   const mineForDeleteState = await loadMine();
@@ -136,6 +213,11 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
         </div>
         <button type="button" class="add-social" data-add-contact-value="url">${esc(t("addAnother"))}</button>
       </div>
+      <div id="optional-field-list">
+        ${data.contact.department ? optionalContactFieldHtml("department", data.contact.department) : ""}
+        ${data.contact.note ? optionalContactFieldHtml("note", data.contact.note) : ""}
+      </div>
+      ${addFieldMenuHtml(data.contact)}
       ${canDelete ? `<button type="button" class="form-delete-btn" id="delete-card-btn">${esc(t("deleteThisCard"))}</button>` : ""}
     </form>
   `;
@@ -250,15 +332,38 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
   const updateRole = () => {
     const role = roleLine({
       title: (form.querySelector('[name="title"]') as HTMLInputElement).value.trim(),
+      department: (form.querySelector('[name="department"]') as HTMLInputElement | null)?.value.trim(),
       org: (form.querySelector('[name="org"]') as HTMLInputElement).value.trim(),
     });
     cardRoleEl().textContent = role || " ";
   };
   form.querySelector('[name="title"]')!.addEventListener("input", updateRole);
   form.querySelector('[name="org"]')!.addEventListener("input", updateRole);
+  form.addEventListener("input", (e) => {
+    const target = e.target as HTMLElement;
+    if (target.matches('[name="department"]')) updateRole();
+  });
 
   form.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
+    if (target.id === "optional-field-menu-btn") {
+      const menu = document.getElementById("optional-field-menu") as HTMLElement | null;
+      if (!menu) return;
+      menu.hidden = !menu.hidden;
+      if (!menu.hidden) positionOptionalFieldMenu(menu, target);
+      return;
+    }
+    const optionalFieldBtn = target.closest<HTMLButtonElement>("[data-add-optional-field]");
+    if (optionalFieldBtn) {
+      const kind = optionalFieldBtn.getAttribute("data-add-optional-field") as OptionalContactField;
+      markDirty();
+      form.querySelector("#optional-field-list")!.insertAdjacentHTML("beforeend", optionalContactFieldHtml(kind));
+      optionalFieldBtn.remove();
+      if (!form.querySelector("[data-add-optional-field]")) document.getElementById("optional-field-add-block")?.remove();
+      else document.getElementById("optional-field-menu")?.setAttribute("hidden", "");
+      if (kind === "department") updateRole();
+      return;
+    }
     if (target.hasAttribute("data-remove-contact-value")) {
       const list = target.closest(".field")!;
       const rows = list.querySelectorAll("[data-contact-row]");
@@ -294,14 +399,15 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
     }
     await saveMine(mine);
     storeActiveMineId(saved.id);
+    scheduleCardSyncPush();
     renderDetail(saved);
   });
 
   if (canDelete) {
     document.getElementById("delete-card-btn")!.addEventListener("click", async () => {
-      const remaining = (await loadMine()).filter((c) => c.id !== existing!.id);
-      await saveMine(remaining);
+      await deleteMineCard(existing!.id);
       clearActiveMineId();
+      scheduleCardSyncPush();
       void renderStack();
     });
   }
@@ -310,6 +416,7 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
 /* ============ detail (a single Mine card, full view) ============ */
 
 export function renderDetail(data: MineCard): void {
+  currentView = { kind: "mine-detail", id: data.id };
   storeActiveMineId(data.id);
   stage.innerHTML = `
     <div class="top-bar top-bar-back top-bar-split">
@@ -414,6 +521,7 @@ let onboardingDismissedThisPageLoad = false;
 // instead of the home screen it actually points at. An empty home screen
 // with its own "create your card" CTA fixes all three at once.
 export async function renderStack(): Promise<void> {
+  currentView = { kind: "mine-stack" };
   const mine = await loadMine();
 
   const bodyHtml = mine.length
@@ -456,6 +564,7 @@ export async function renderStack(): Promise<void> {
       </div>
     </div>
     ${bodyHtml}
+    <p class="home-bookmark-hint">Bookmark this page to quickly share your card and view received cards.</p>
   `;
   stage.querySelectorAll<HTMLButtonElement>("[data-open-mine]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -535,6 +644,21 @@ function downloadVCard(data: CardData): void {
   a.remove();
 }
 
+function downloadBlob(bytes: BlobPart, filename: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function downloadTextFile(text: string, filename: string, type: string): void {
+  downloadBlob(text, filename, type);
+}
+
 function vcardFile(data: CardData): File {
   return new File([buildVCard(data)], vcardFilename(data), { type: "text/vcard" });
 }
@@ -559,12 +683,13 @@ async function openVCardWithApps(data: CardData): Promise<void> {
 }
 
 function vcardActionsHtml(data: CardData, prefix: string): string {
-  const openButton = canOpenVCardWithApps(data)
-    ? `<button class="btn btn-secondary btn-block" id="${prefix}-open-vcard-btn" type="button">${esc(t("openWithApps"))}</button>`
+  const canOpen = canOpenVCardWithApps(data);
+  const openButton = canOpen
+    ? `<button class="btn btn-secondary" id="${prefix}-open-vcard-btn" type="button">${esc(t("openWithApps"))}</button>`
     : "";
   return `
-    <div class="vcard-actions">
-      <button class="btn btn-primary btn-block" id="${prefix}-download-vcard-btn" type="button">${esc(t("downloadVCard"))}</button>
+    <div class="vcard-actions${canOpen ? " btn-row" : ""}">
+      <button class="btn btn-primary${canOpen ? "" : " btn-block"}" id="${prefix}-download-vcard-btn" type="button">${esc(t("downloadVCard"))}</button>
       ${openButton}
     </div>
   `;
@@ -585,9 +710,11 @@ function recipientLocalNavHtml(): string {
 
 export interface RecipientOpts {
   onBack?: () => void;
+  entryId?: string;
 }
 
 export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void {
+  currentView = opts.entryId ? { kind: "received-detail", id: opts.entryId } : { kind: "other" };
   scrollToTop();
   const inApp = isInAppBrowser(navigator.userAgent);
   const saveActionHtml = inApp
@@ -604,6 +731,7 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
     ${cardFaceHtml(data)}
     ${contactSheetHtml(data)}
     ${saveActionHtml}
+    ${opts.entryId ? `<button type="button" class="form-delete-btn" id="recipient-delete-btn">${esc(t("deleteThisCard"))}</button>` : ""}
     ${opts.onBack ? "" : recipientLocalNavHtml()}
     ${opts.onBack ? "" : ownCardCtaHtml()}
     <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">Myfield</a></div>
@@ -622,6 +750,15 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
     });
   }
 
+  document.getElementById("recipient-delete-btn")?.addEventListener("click", async () => {
+    if (!opts.entryId) return;
+    invalidateReceivedPageSnapshot();
+    await deleteReceivedEntry(opts.entryId);
+    scheduleCardSyncPush();
+    showToast(t("deleted"));
+    void renderReceivedPage();
+  });
+
   if (inApp) {
     document.getElementById("copy-link-btn")!.addEventListener("click", async () => {
       try {
@@ -639,6 +776,7 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
 }
 
 export function renderError(): void {
+  currentView = { kind: "other" };
   stage.innerHTML = `
     <div class="error-panel">
       <h1>${esc(t("linkUnreadableTitle"))}</h1>
@@ -769,6 +907,7 @@ function restoreOrRenderReceivedPage(): void {
    preference. ============ */
 
 export async function renderReceivedPage(): Promise<void> {
+  currentView = { kind: "received-list" };
   invalidateReceivedPageSnapshot();
   const received = (await loadReceived()).slice().sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
   const layout = loadReceivedLayout();
@@ -811,6 +950,7 @@ export async function renderReceivedPage(): Promise<void> {
       const dataUrl = await readOriginalPhoto(file);
       const previewDataUrl = await createPhotoThumbnail(dataUrl).catch(() => undefined);
       const id = await addReceivedPhoto(dataUrl, previewDataUrl);
+      scheduleCardSyncPush();
       showToast(t("photoSaved"));
       const entry = (await loadReceived()).find((item) => item.id === id);
       if (entry) void renderPhotoEdit(entry);
@@ -830,7 +970,7 @@ export async function renderReceivedPage(): Promise<void> {
       if (!entry) return;
       captureReceivedPageSnapshot(received);
       if (cardPhotoAsset(entry.data)) void renderPhotoDetail(entry);
-      else renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage });
+      else renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
     });
   });
   void hydrateReceivedPhotoFaces(received);
@@ -855,7 +995,6 @@ async function hydrateReceivedPhotoFaces(received: ReceivedEntry[]): Promise<voi
     if (!button) return;
     if (button.querySelector(".photo-card-face img")) continue;
     button.innerHTML = photoCardHtml(imageDataUrl, cardPhoto.transform);
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   }
 }
 
@@ -874,8 +1013,152 @@ async function ensureReceivedPhotoPreviews(received: ReceivedEntry[]): Promise<v
   if (changed && document.getElementById("layout-toggle-btn")) void renderReceivedPage();
 }
 
-const FIELD_TYPES: FieldType[] = ["name", "title", "company", "phone", "email", "address", "social", "other"];
+const FIELD_TYPES: FieldType[] = ["name", "title", "department", "company", "phone", "email", "address", "social", "note", "other"];
 const CONTACT_VALUE_TYPES = new Set<ContactValueType>(["work", "home", "mobile", "main", "other"]);
+const CARD_SYNC_PUSH_DEBOUNCE_MS = 1000;
+const CARD_SYNC_PUSH_MAX_WAIT_MS = 5000;
+let cardSyncController: ReturnType<typeof createCardSyncController> | null = null;
+let cardSyncHintsStarted = false;
+let cardSyncPushDebounceTimer: number | null = null;
+let cardSyncPushMaxWaitTimer: number | null = null;
+let cardSyncPushing = false;
+let cardSyncPushPending = false;
+let cardSyncPushRequested = false;
+let cardSyncBootstrapPromise: Promise<void> | null = null;
+
+async function refreshCurrentViewAfterSync(): Promise<void> {
+  invalidateReceivedPageSnapshot();
+  const view = currentView;
+  if (view.kind === "mine-stack") {
+    await renderStack();
+    return;
+  }
+  if (view.kind === "mine-detail") {
+    const card = (await loadMine()).find((item) => item.id === view.id);
+    if (card) renderDetail(card);
+    else await renderStack();
+    return;
+  }
+  if (view.kind === "received-list") {
+    await renderReceivedPage();
+    return;
+  }
+  if (view.kind === "received-detail" || view.kind === "photo-detail") {
+    const entry = (await loadReceived()).find((item) => item.id === view.id);
+    if (!entry) {
+      await renderReceivedPage();
+      return;
+    }
+    if (cardPhotoAsset(entry.data)) await renderPhotoDetail(entry);
+    else renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
+  }
+}
+
+function clearCardSyncPushTimers(): void {
+  if (cardSyncPushDebounceTimer != null) {
+    window.clearTimeout(cardSyncPushDebounceTimer);
+    cardSyncPushDebounceTimer = null;
+  }
+  if (cardSyncPushMaxWaitTimer != null) {
+    window.clearTimeout(cardSyncPushMaxWaitTimer);
+    cardSyncPushMaxWaitTimer = null;
+  }
+}
+
+function startCardSyncHints(): void {
+  if (!cardSyncController || cardSyncHintsStarted) return;
+  cardSyncHintsStarted = true;
+  cardSyncController.startRemoteHints(() => {
+    void runCardSyncNow();
+  }, (error) => {
+    console.warn("[sync] feed stream error", error);
+    cardSyncHintsStarted = false;
+  });
+}
+
+async function resetCardSyncAuthorization(): Promise<void> {
+  clearCardSyncPushTimers();
+  cardSyncPushPending = false;
+  cardSyncController?.dispose();
+  cardSyncController = null;
+  cardSyncHintsStarted = false;
+  await clearCardSyncAuthorization();
+}
+
+async function bootstrapCardSync(): Promise<void> {
+  if (cardSyncController) {
+    startCardSyncHints();
+    return;
+  }
+  if (!cardSyncBootstrapPromise) {
+    cardSyncBootstrapPromise = (async () => {
+      try {
+        cardSyncController = await connectCardSync();
+        startCardSyncHints();
+      } catch (error) {
+        // Existing sync context can expire or be cleared server-side. Startup
+        // should stay local-first and let the Sync settings page re-authorize.
+        console.warn("[sync] could not connect from existing context", error);
+        cardSyncController = null;
+        cardSyncHintsStarted = false;
+      } finally {
+        cardSyncBootstrapPromise = null;
+      }
+    })();
+  }
+  await cardSyncBootstrapPromise;
+}
+
+function scheduleCardSyncPush(): void {
+  cardSyncPushRequested = true;
+  if (!cardSyncController) {
+    startBackgroundCardSync();
+    return;
+  }
+  if (cardSyncPushDebounceTimer != null) window.clearTimeout(cardSyncPushDebounceTimer);
+  cardSyncPushDebounceTimer = window.setTimeout(() => {
+    void runCardSyncNow();
+  }, CARD_SYNC_PUSH_DEBOUNCE_MS);
+  if (cardSyncPushMaxWaitTimer == null) {
+    cardSyncPushMaxWaitTimer = window.setTimeout(() => {
+      void runCardSyncNow();
+    }, CARD_SYNC_PUSH_MAX_WAIT_MS);
+  }
+}
+
+async function runCardSyncNow(): Promise<void> {
+  clearCardSyncPushTimers();
+  if (cardSyncPushing) {
+    cardSyncPushPending = true;
+    return;
+  }
+  if (!cardSyncController) {
+    startBackgroundCardSync();
+    return;
+  }
+  cardSyncPushing = true;
+  cardSyncPushRequested = false;
+  try {
+    const result = await cardSyncController.syncNow();
+    if (result.status.lastError) console.warn("[sync] sync failed", result.status.lastError);
+    if (result.changed) await refreshCurrentViewAfterSync();
+  } catch (error) {
+    console.error("[sync] unexpected sync failure", error);
+  } finally {
+    cardSyncPushing = false;
+    if (cardSyncPushPending || cardSyncPushRequested) {
+      cardSyncPushPending = false;
+      scheduleCardSyncPush();
+    }
+  }
+}
+
+function startBackgroundCardSync(): void {
+  void (async () => {
+    await bootstrapCardSync();
+    if (cardSyncController) await runCardSyncNow();
+  })();
+}
 
 function fieldTypeLabel(type: FieldType): string {
   if (type === "other") return t("other");
@@ -908,15 +1191,37 @@ function fieldRowHtml(field: RecognizedField): string {
 function recognizedFieldsEditorHtml(fields: RecognizedField[]): string {
   return `
     <div class="panel" id="scan-review-panel">
-      <h2>${esc(t("reviewFields"))}</h2>
       <div id="scan-field-list">${fields.map(fieldRowHtml).join("")}</div>
       <button type="button" class="add-social" id="scan-add-field">${esc(t("addField"))}</button>
-      <div class="btn-row">
-        <button type="button" class="btn btn-secondary" id="scan-cancel-btn">${esc(t("cancel"))}</button>
-        <button type="button" class="btn btn-primary" id="scan-save-btn">${esc(t("save"))}</button>
-      </div>
     </div>
   `;
+}
+
+async function receivedEditPreviewHtml(entry: ReceivedEntry): Promise<string> {
+  const cardPhoto = cardPhotoAsset(entry.data);
+  if (!cardPhoto) return cardFaceHtml(entry.data);
+  const photoDataUrl = await loadCardAssetDataUrl(cardPhoto);
+  return photoDataUrl ? photoCardHtml(photoDataUrl, cardPhoto.transform) : cardFaceHtml(entry.data);
+}
+
+async function renderRecognizedFieldsEdit(entry: ReceivedEntry, fields: RecognizedField[]): Promise<void> {
+  currentView = { kind: "editing" };
+  scrollToTop();
+  const previewHtml = await receivedEditPreviewHtml(entry);
+  stage.innerHTML = `
+    <div class="top-bar top-bar-split">
+      <div class="top-bar-left">
+        <span class="top-bar-title">${esc(t("reviewFields"))}</span>
+      </div>
+      <div class="top-bar-actions">
+        <button type="button" class="top-bar-cancel-btn" id="scan-cancel-btn">${esc(t("cancel"))}</button>
+        <button type="button" class="top-bar-done-btn" id="scan-save-btn">${esc(t("save"))}</button>
+      </div>
+    </div>
+    ${previewHtml}
+    ${recognizedFieldsEditorHtml(fields)}
+  `;
+  wireFieldEditor(stage, entry, () => void renderPhotoDetail(entry));
 }
 
 // Shown immediately after capture/upload — the entry is already saved (see
@@ -926,6 +1231,7 @@ function recognizedFieldsEditorHtml(fields: RecognizedField[]): string {
 // against the ID-1 frame); scale/position come from drag-to-pan and
 // pinch-to-zoom, tracked over the same pointer stream.
 async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
+  currentView = { kind: "editing" };
   scrollToTop();
   const cardPhoto = cardPhotoAsset(entry.data);
   if (!cardPhoto) return;
@@ -981,11 +1287,15 @@ async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
   // whichever gesture is now active instead of jumping.
   const pointers = new Map<number, { x: number; y: number }>();
   let dragStart: { x: number; y: number; offsetX: number; offsetY: number } | null = null;
-  let pinchStart: { distance: number; scale: number } | null = null;
+  let pinchStart: { distance: number; scale: number; x: number; y: number; offsetX: number; offsetY: number } | null = null;
 
   const pinchDistance = (): number => {
     const [a, b] = [...pointers.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  const pinchCenter = (): { x: number; y: number } => {
+    const [a, b] = [...pointers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   };
 
   stageEl.addEventListener("pointerdown", (e) => {
@@ -996,7 +1306,8 @@ async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
       pinchStart = null;
     } else if (pointers.size === 2) {
       dragStart = null;
-      pinchStart = { distance: pinchDistance(), scale: state.scale };
+      const center = pinchCenter();
+      pinchStart = { distance: pinchDistance(), scale: state.scale, x: center.x, y: center.y, offsetX: state.offsetX, offsetY: state.offsetY };
     }
   });
 
@@ -1014,8 +1325,14 @@ async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
       Object.assign(state, normalizePhotoTransform(state));
       applyTransform();
     } else if (pointers.size === 2 && pinchStart) {
-      const ratio = pinchDistance() / pinchStart.distance;
-      state.scale = Math.min(3, Math.max(0.5, pinchStart.scale * ratio));
+      const distance = pinchDistance();
+      const ratio = pinchStart.distance > 0 ? distance / pinchStart.distance : 1;
+      const rect = stageEl.getBoundingClientRect();
+      const center = pinchCenter();
+      state.scale = pinchStart.scale * ratio;
+      state.offsetX = pinchStart.offsetX + (center.x - pinchStart.x) / rect.width;
+      state.offsetY = pinchStart.offsetY + (center.y - pinchStart.y) / rect.height;
+      Object.assign(state, normalizePhotoTransform(state));
       applyTransform();
     }
   });
@@ -1044,6 +1361,7 @@ async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
       return;
     }
     invalidateReceivedPageSnapshot();
+    scheduleCardSyncPush();
     cardPhoto.transform = safeTransform;
     void renderPhotoDetail(entry, true);
   });
@@ -1058,12 +1376,13 @@ async function renderPhotoEdit(entry: ReceivedEntry): Promise<void> {
 // renderPhotoDetail re-renders as its own fallback (see runScan's catch
 // below), since re-running unattended each time would loop forever.
 async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promise<void> {
+  currentView = { kind: "photo-detail", id: entry.id };
   scrollToTop();
   const cardPhoto = cardPhotoAsset(entry.data);
   if (!cardPhoto) return;
   const photoDataUrl = await loadCardAssetDataUrl(cardPhoto);
   if (!photoDataUrl) return;
-  const hasRecognizedContact = Boolean(entry.data.contact.fn || entry.data.contact.title || entry.data.contact.org || entry.data.contact.phones?.length || entry.data.contact.emails?.length || entry.data.contact.addresses?.length || entry.data.contact.urls?.length);
+  const hasRecognizedContact = Boolean(entry.data.contact.fn || entry.data.contact.title || entry.data.contact.department || entry.data.contact.org || entry.data.contact.note || entry.data.contact.phones?.length || entry.data.contact.emails?.length || entry.data.contact.addresses?.length || entry.data.contact.urls?.length);
   const scanActionHtml = hasRecognizedContact
     ? `
       <div class="btn-row">
@@ -1089,6 +1408,7 @@ async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promis
   document.getElementById("photo-delete-btn")!.addEventListener("click", async () => {
     invalidateReceivedPageSnapshot();
     await deleteReceivedEntry(entry.id);
+    scheduleCardSyncPush();
     showToast(t("deleted"));
     void renderReceivedPage();
   });
@@ -1126,8 +1446,7 @@ async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promis
       // was first used from.
       langs.forEach(markAiLanguageDownloaded);
       const fields = parseContactFields(lines);
-      actionArea.innerHTML = recognizedFieldsEditorHtml(fields);
-      wireFieldEditor(actionArea, entry, () => void renderPhotoDetail(entry));
+      await renderRecognizedFieldsEdit(entry, fields);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[scan] recognition threw:", err);
@@ -1170,8 +1489,7 @@ async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promis
   document.getElementById("photo-scan-btn")?.addEventListener("click", attemptScan);
   document.getElementById("photo-rescan-btn")?.addEventListener("click", () => void runScan());
   document.getElementById("photo-edit-fields-btn")?.addEventListener("click", () => {
-    actionArea.innerHTML = recognizedFieldsEditorHtml(cardDataToRecognizedFields(entry.data));
-    wireFieldEditor(actionArea, entry, () => void renderPhotoDetail(entry));
+    void renderRecognizedFieldsEdit(entry, cardDataToRecognizedFields(entry.data));
   });
 
   if (autoScan && !hasRecognizedContact) attemptScan();
@@ -1206,6 +1524,7 @@ function wireFieldEditor(container: HTMLElement, entry: ReceivedEntry, onDone: (
       return;
     }
     invalidateReceivedPageSnapshot();
+    scheduleCardSyncPush();
     // Mutate the in-memory entry too — onDone() re-renders from this same
     // object, and storage alone updating wouldn't be reflected in it.
     entry.data = { ...data, assets: entry.data.assets };
@@ -1217,8 +1536,15 @@ function wireFieldEditor(container: HTMLElement, entry: ReceivedEntry, onDone: (
 /* ============ Settings / Language pages ============ */
 
 export function renderSettingsPage(): void {
+  currentView = { kind: "other" };
   const currentName = LOCALES.find((l) => l.code === loadLocale())?.name || "English";
   const aiLabel = isAiEnabled() ? t("on") : t("off");
+  const syncStatus = cardSyncController?.status();
+  const syncLabel = syncStatus?.connected
+    ? t(syncStatus.running ? "syncSyncing" : "syncConnected")
+    : cardSyncBootstrapPromise
+      ? t("syncSyncing")
+      : t("syncLocalOnly");
   stage.innerHTML = `
     <div class="top-bar top-bar-back">
       <button type="button" class="icon-btn" id="settings-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
@@ -1233,6 +1559,14 @@ export function renderSettingsPage(): void {
         <span>${esc(t("aiSettings"))}</span>
         <span>${esc(aiLabel)} &rsaquo;</span>
       </button>
+      <button type="button" class="settings-row" id="sync-entry-btn">
+        <span>${esc(t("syncSettings"))}</span>
+        <span>${esc(syncLabel)} &rsaquo;</span>
+      </button>
+      <button type="button" class="settings-row" id="export-entry-btn">
+        <span>${esc(t("exportData"))}</span>
+        <span>&rsaquo;</span>
+      </button>
       <button type="button" class="settings-row" id="privacy-entry-btn">
         <span>${esc(t("privacySettings"))}</span>
         <span>&rsaquo;</span>
@@ -1246,17 +1580,152 @@ export function renderSettingsPage(): void {
   document.getElementById("settings-back-btn")!.addEventListener("click", () => void renderStack());
   document.getElementById("language-entry-btn")!.addEventListener("click", () => renderLanguagePage());
   document.getElementById("ai-entry-btn")!.addEventListener("click", () => renderAiSettingsPage());
+  document.getElementById("sync-entry-btn")!.addEventListener("click", () => void renderSyncPage());
+  document.getElementById("export-entry-btn")!.addEventListener("click", () => renderExportDataPage());
   document.getElementById("privacy-entry-btn")!.addEventListener("click", () => renderPrivacyPage());
   document.getElementById("about-entry-btn")!.addEventListener("click", () => renderAboutPage());
+}
+
+async function ensureCardSyncController(): Promise<boolean> {
+  if (cardSyncController) {
+    startCardSyncHints();
+    return true;
+  }
+  await bootstrapCardSync();
+  return Boolean(cardSyncController);
+}
+
+async function renderSyncPage(): Promise<void> {
+  currentView = { kind: "other" };
+  await ensureCardSyncController();
+  const status = cardSyncController?.status();
+  const statusText = status?.running
+    ? t("syncSyncing")
+    : status?.lastError
+      ? t("syncNeedsAttention")
+      : status?.connected
+        ? t("syncConnected")
+        : t("syncLocalOnly");
+  stage.innerHTML = `
+    <div class="top-bar top-bar-back">
+      <button type="button" class="icon-btn" id="sync-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
+      <span class="top-bar-title">${esc(t("syncSettings"))}</span>
+    </div>
+    <div class="panel">
+      <p class="settings-description">${esc(t("syncDescription"))}</p>
+      <div class="settings-row settings-row-static">
+        <span>${esc(t("syncStatus"))}</span>
+        <span>${esc(statusText)}</span>
+      </div>
+      ${status?.lastSyncedAt ? `<div class="settings-row settings-row-static"><span>${esc(t("syncLastSynced"))}</span><span>${esc(new Date(status.lastSyncedAt).toLocaleString())}</span></div>` : ""}
+      ${status?.lastError ? `<p class="settings-description sync-error">${esc(status.lastError)}</p>` : ""}
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" id="sync-disconnect-btn"${status?.connected ? "" : " disabled"}>${esc(t("syncDisconnect"))}</button>
+        <button type="button" class="btn btn-primary" id="sync-action-btn">${esc(status?.connected && !status.lastError ? t("syncNow") : t("syncConnect"))}</button>
+      </div>
+    </div>
+  `;
+  document.getElementById("sync-back-btn")!.addEventListener("click", () => renderSettingsPage());
+  document.getElementById("sync-action-btn")!.addEventListener("click", async () => {
+    if (status?.lastError) {
+      await resetCardSyncAuthorization();
+      await authorizeCardSync();
+      return;
+    }
+    const connected = await ensureCardSyncController();
+    if (!connected) {
+      await authorizeCardSync();
+      return;
+    }
+    showToast(t("syncSyncing"));
+    await runCardSyncNow();
+    const result = cardSyncController!.status();
+    showToast(result.lastError ? t("syncNeedsAttention") : t("syncConnected"));
+    void renderSyncPage();
+  });
+  document.getElementById("sync-disconnect-btn")?.addEventListener("click", async () => {
+    await resetCardSyncAuthorization();
+    showToast(t("syncLocalOnly"));
+    void renderSyncPage();
+  });
+}
+
+function renderExportDataPage(): void {
+  currentView = { kind: "other" };
+  stage.innerHTML = `
+    <div class="top-bar top-bar-back">
+      <button type="button" class="icon-btn" id="export-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
+      <span class="top-bar-title">${esc(t("exportData"))}</span>
+    </div>
+    <div class="panel">
+      <button type="button" class="settings-row" id="export-my-cards-btn">
+        <span>${esc(t("exportMyCardsVCard"))}</span>
+        <span>&rsaquo;</span>
+      </button>
+      <button type="button" class="settings-row" id="export-received-cards-btn">
+        <span>${esc(t("exportReceivedCardsVCard"))}</span>
+        <span>&rsaquo;</span>
+      </button>
+      <button type="button" class="settings-row" id="export-photo-cards-btn">
+        <span>${esc(t("exportPhotoCards"))}</span>
+        <span>&rsaquo;</span>
+      </button>
+    </div>
+  `;
+  document.getElementById("export-back-btn")!.addEventListener("click", () => renderSettingsPage());
+  document.getElementById("export-my-cards-btn")!.addEventListener("click", async () => {
+    try {
+      const payload = myCardsVCard(await loadMine());
+      if (!payload) {
+        showToast(t("nothingToExport"));
+        return;
+      }
+      downloadTextFile(payload, "my-cards.vcf", "text/vcard;charset=utf-8");
+    } catch {
+      showToast(t("exportFailed"));
+    }
+  });
+  document.getElementById("export-received-cards-btn")!.addEventListener("click", async () => {
+    try {
+      const payload = receivedCardsVCard(await loadReceived());
+      if (!payload) {
+        showToast(t("nothingToExport"));
+        return;
+      }
+      downloadTextFile(payload, "received-cards.vcf", "text/vcard;charset=utf-8");
+    } catch {
+      showToast(t("exportFailed"));
+    }
+  });
+  document.getElementById("export-photo-cards-btn")!.addEventListener("click", async () => {
+    try {
+      const entries = (await loadReceived()).filter((entry) => cardPhotoAsset(entry.data));
+      const items = [];
+      for (const entry of entries) {
+        const photo = cardPhotoAsset(entry.data);
+        if (!photo) continue;
+        const dataUrl = await loadCardAssetDataUrl(photo);
+        if (dataUrl) items.push({ entry, dataUrl });
+      }
+      if (!items.length) {
+        showToast(t("nothingToExport"));
+        return;
+      }
+      downloadBlob(buildPhotoCardsZip(items), "photo-cards.zip", "application/zip");
+    } catch {
+      showToast(t("exportFailed"));
+    }
+  });
 }
 
 // Version/license/copyright boilerplate is kept in a single fixed language
 // here rather than run through t() — same reasoning as the brand names
 // elsewhere: this is legal/attribution text, not conversational UI copy,
 // and most apps show it untranslated regardless of locale.
-const APP_VERSION = "0.9.2";
+const APP_VERSION = "0.9.3";
 
 function renderAboutPage(): void {
+  currentView = { kind: "other" };
   stage.innerHTML = `
     <div class="top-bar top-bar-back">
       <button type="button" class="icon-btn" id="about-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
@@ -1286,14 +1755,18 @@ function renderAboutPage(): void {
 // (see renderDetail) links here rather than showing its own separate
 // popover, so there's one copy of this text to keep accurate, not two.
 function renderPrivacyPage(): void {
+  currentView = { kind: "other" };
+  const showTranslationNotice = loadLocale() !== "en";
   stage.innerHTML = `
     <div class="top-bar top-bar-back">
       <button type="button" class="icon-btn" id="privacy-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
       <span class="top-bar-title">${esc(t("privacySettings"))}</span>
     </div>
     <div class="panel privacy-panel">
+      ${showTranslationNotice ? `<p class="privacy-translation-notice">${esc(t("privacyTranslationNotice"))}</p>` : ""}
       <p>${esc(t("privacyPoint1"))}</p>
       <p>${esc(t("privacyPoint2"))}</p>
+      <p>${esc(t("privacyPointSync"))}</p>
       <p>${esc(t("privacyPoint3"))}</p>
       <p class="privacy-tagline">${esc(t("privacyTagline"))}</p>
     </div>
@@ -1314,12 +1787,18 @@ const AI_LANGUAGE_SIZE: Record<string, string> = {
   jpn: "~1.5 MB",
   kor: "~1.1 MB",
   por: "~1 MB",
+  msa: "~1.1 MB",
+  tam: "~1.3 MB",
+  tha: "~0.9 MB",
+  vie: "~0.4 MB",
+  ind: "~0.6 MB",
 };
 
 // No separate Enable/Disable control — checking a language here (or via the
 // inline enable prompt in renderPhotoDetail) *is* turning the feature on;
 // see isAiEnabled in storage.ts.
 function renderAiSettingsPage(): void {
+  currentView = { kind: "other" };
   const selectedLangs = loadAiLanguages();
   const downloadedLangs = loadDownloadedAiLanguages();
 
@@ -1407,6 +1886,7 @@ function renderAiSettingsPage(): void {
 }
 
 function renderLanguagePage(): void {
+  currentView = { kind: "other" };
   const current = loadLocale();
   const languageRows = LOCALES.map(
     (l) => `
@@ -1436,6 +1916,17 @@ function renderLanguagePage(): void {
 /* ============ entry ============ */
 
 export async function initApp(): Promise<void> {
+  const syncCallback = await handleCardSyncAuthCallback();
+  if (syncCallback === "approved") {
+    startBackgroundCardSync();
+    await renderStack();
+    return;
+  }
+  if (syncCallback === "handled") {
+    await renderStack();
+    return;
+  }
+  startBackgroundCardSync();
   const fragment = location.hash.slice(1);
   if (fragment) {
     try {
@@ -1459,6 +1950,8 @@ export async function initApp(): Promise<void> {
       // re-opening the same link (or a re-share after an edit) updates the
       // existing Received Cards entry instead of piling up a new one.
       await addReceived(data);
+      scheduleCardSyncPush();
+      startBackgroundCardSync();
       invalidateReceivedPageSnapshot();
       renderRecipient(data);
     } catch {

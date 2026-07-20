@@ -12,6 +12,10 @@ test("recognized field editing preserves contact value type and social label", (
     id: CARD_ID,
     contact: {
       fn: "Ada Lovelace",
+      title: "Founder",
+      department: "Research",
+      org: "Analytical Engines",
+      note: "Met at conference",
       phones: [{ type: "home", value: "+1 555 0100" }],
       emails: [{ type: "home", value: "ada@example.com" }],
       addresses: [{ type: "other", value: "Leadenhall Street" }],

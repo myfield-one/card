@@ -1,4 +1,4 @@
-import { isUuid } from "./validators.ts";
+import { isHexColor, isImageDataUrl, isUuid } from "./validators.ts";
 
 export type ContactValueType = "work" | "home" | "mobile" | "main" | "other";
 
@@ -9,11 +9,14 @@ export interface ContactValue {
 }
 
 export type CardTheme = "beige" | "teal" | "ink" | "custom";
+export const CARD_THEME_VALUES = ["beige", "teal", "ink", "custom"] as const satisfies readonly CardTheme[];
 
 export interface ContactInfo {
   fn: string;
   title?: string;
   org?: string;
+  department?: string;
+  note?: string;
   phones?: ContactValue[];
   emails?: ContactValue[];
   addresses?: ContactValue[];
@@ -60,7 +63,7 @@ export interface CardData {
 }
 
 const FRAGMENT_PREFIX = "v2p";
-const CARD_THEMES = new Set<CardTheme>(["beige", "teal", "ink", "custom"]);
+export const CARD_THEMES = new Set<CardTheme>(CARD_THEME_VALUES);
 const CONTACT_VALUE_TYPES = new Set<ContactValueType>(["work", "home", "mobile", "main", "other"]);
 const TEXT_MAX = 2048;
 const CONTACT_VALUES_MAX = 24;
@@ -76,14 +79,6 @@ function cleanString(value: unknown, max = TEXT_MAX): string | undefined {
     .replace(/\r\n?|\n/g, " ")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .slice(0, max);
-}
-
-function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
-}
-
-function isImageDataUrl(value: unknown): value is string {
-  return typeof value === "string" && /^data:(image\/[-+.\w]+);base64,/i.test(value);
 }
 
 function normalizeContactValues(value: unknown): ContactValue[] | undefined {
@@ -110,6 +105,8 @@ function normalizeContactInfo(value: unknown): ContactInfo | null {
   const contact: ContactInfo = { fn };
   const title = cleanString(value.title)?.trim();
   const org = cleanString(value.org)?.trim();
+  const department = cleanString(value.department)?.trim();
+  const note = cleanString(value.note)?.trim();
   const phones = normalizeContactValues(value.phones);
   const emails = normalizeContactValues(value.emails);
   const addresses = normalizeContactValues(value.addresses);
@@ -117,6 +114,8 @@ function normalizeContactInfo(value: unknown): ContactInfo | null {
 
   if (title) contact.title = title;
   if (org) contact.org = org;
+  if (department) contact.department = department;
+  if (note) contact.note = note;
   if (phones) contact.phones = phones;
   if (emails) contact.emails = emails;
   if (addresses) contact.addresses = addresses;
