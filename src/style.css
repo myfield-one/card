@@ -1,0 +1,1110 @@
+:root {
+  --stage: #1b1c22;
+  --stage-line: #2a2c34;
+  --text: #f1efe8;
+
+  /* App chrome accent (buttons, links, icons) — matches the Deep Teal
+     brand mark and stays fixed regardless of which card face theme below
+     is showing, so it doesn't shift every time the viewed card changes. */
+  --accent: #146c67;
+  --accent-bright: #1e8f88;
+  --chrome-height: 48px;
+  --chrome-top-space: 16px;
+  --chrome-bottom-space: 10px;
+  --chrome-scroll-clearance: calc(max(env(safe-area-inset-top), 0px) + var(--chrome-top-space) + var(--chrome-height) + var(--chrome-bottom-space) + 12px);
+
+  /* Card face theme: beige (default). Each `.card-face[data-theme]`
+     variant below overrides this same set of variables, scoped to the
+     card element itself. */
+  --card: #f3ecd9;
+  --card-ink: #22201a;
+  --card-accent: #146c67;
+  --card-accent-bright: #1e8f88;
+}
+.card-face[data-theme="teal"] {
+  --card: #146c67;
+  --card-ink: #f1efe8;
+  --card-accent: #d7ab5c;
+  --card-accent-bright: #eac488;
+}
+.card-face[data-theme="ink"] {
+  --card: #0f1f1b;
+  --card-ink: #f1efe8;
+  --card-accent: #d7ab5c;
+  --card-accent-bright: #eac488;
+}
+/* The default border/shadow above (on .card-face) is tuned for a light
+   card on a dark stage; any card whose background is itself dark — the
+   built-in Black theme, or a custom color the user picked that happens to
+   be dark — needs a light edge (instead of a dark one) plus a faint top
+   highlight, or it visually merges into the stage. `data-card-dark` is set
+   by JS (applyCardFaceTheme/cardFaceHtml) for custom colors below a
+   luminance threshold. */
+.card-face[data-theme="ink"],
+.card-face[data-card-dark="true"] {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 16px 32px -18px rgba(0, 0, 0, 0.6),
+    0 4px 10px -4px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+html {
+  /* Short pages (My Card) don't scroll; taller ones (Received Cards) do,
+     and a classic reserved-width scrollbar appearing/disappearing shifts
+     the centered .stage sideways between pages. Always reserving the
+     gutter keeps the available width constant either way. */
+  scrollbar-gutter: stable;
+  scroll-padding-top: var(--chrome-scroll-clearance);
+}
+body {
+  background: var(--stage);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+.stage {
+  width: 100%;
+  max-width: 430px;
+  min-height: 100vh;
+  padding: 28px 20px 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- card face ----
+   ISO/IEC 7810 ID-1 ratio (85.6mm x 54mm) — same proportions as the
+   physical NFC card, held constant across all viewport widths. */
+.card-face {
+  position: relative;
+  aspect-ratio: 85.6 / 54;
+  background: var(--card);
+  color: var(--card-ink);
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 20px 22px;
+  overflow: hidden;
+  /* Cards render at different sizes (full-width in the cascade, half-width
+     in the 2-column grid) — size text off the card's own inline size via
+     a container query, not `vw`, so it scales with the card, not the
+     viewport. */
+  container-type: inline-size;
+  /* A soft ambient shadow alone doesn't read as a seam when the card
+     behind it is the same fill color — add a tighter, higher-contrast
+     contact shadow right under the edge so stacked cards visually
+     separate even without any color difference between them. */
+  box-shadow:
+    0 16px 32px -18px rgba(0, 0, 0, 0.6),
+    0 4px 10px -4px rgba(0, 0, 0, 0.45),
+    0 2px 0 rgba(0, 0, 0, 0.05) inset;
+  transform-origin: center bottom;
+  display: flex;
+  flex-direction: column;
+}
+/* ---- share flip (Detail view's card-face <-> QR back panel) ----
+   Rotates the wrapper, not the `.card-face`/`.card-back` child directly —
+   that child already carries its own `card-settle` entrance animation
+   below, and a second `animation` rule on the same element would just
+   override (not combine with) that one. Swap-at-90°: fade+rotate the
+   wrapper down to 90°, swap its innerHTML at the midpoint, then animate
+   back in from -90° to 0°, so front and back never need to share one
+   fixed height the way a true two-sided flip would. */
+.card-flip {
+  perspective: 900px;
+  transition:
+    transform 150ms ease,
+    opacity 150ms ease;
+}
+.card-flip.card-flip-out {
+  transform: rotateY(90deg);
+  opacity: 0;
+}
+.card-flip.card-flip-in {
+  animation: card-flip-in-anim 260ms ease both;
+}
+@keyframes card-flip-in-anim {
+  0% {
+    transform: rotateY(-90deg);
+    opacity: 0;
+  }
+  100% {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+}
+.card-face.card-back {
+  /* Keeps the same ID-1 aspect-ratio as the front by default (no
+     `aspect-ratio: unset` here) — only `.is-zoomed` below relaxes it, when
+     the user taps the QR to enlarge it past what that ratio has room for. */
+  align-items: center;
+  justify-content: center;
+  transition: padding 220ms ease;
+}
+.card-face.card-back.is-zoomed {
+  aspect-ratio: unset;
+  padding: 58px 22px 28px;
+}
+.card-back-name {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  right: 22px;
+  overflow: hidden;
+  color: var(--card-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(17px, 7cqw, 26px);
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-back-qr {
+  /* Sized off the card's own width (not a fixed px) via the container
+     query context .card-face already establishes, so it scales the same
+     way the front's text does across the cascade/grid/full-width cases. */
+  width: 42cqw;
+  max-width: 160px;
+  /* Fixed white tile regardless of card theme — the vendored encoder
+     always emits black-on-white (see share-view.ts), so this keeps it
+     scannable on the Deep Teal / Black card themes too. */
+  padding: 10px;
+  background: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: zoom-in;
+  transition: width 220ms ease, max-width 220ms ease;
+}
+.card-back-with-name .card-back-qr {
+  transform: translateY(10px);
+}
+.card-back.is-zoomed .card-back-qr {
+  width: 88%;
+  max-width: 320px;
+  cursor: zoom-out;
+  transform: none;
+}
+.card-back-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.photo-card-face {
+  padding: 0;
+}
+.photo-card-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* ---- photo edit (rotate/scale/position, right after capture) ----
+   Fixed ID-1 frame like .card-face, so what the user lines up here matches
+   exactly how the photo will sit once it's back in the stack/detail view. */
+.photo-edit-stage {
+  position: relative;
+  aspect-ratio: 85.6 / 54;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--stage-line);
+  touch-action: none;
+  cursor: grab;
+}
+.photo-edit-stage img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.photo-edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+.photo-edit-controls input[type="range"] {
+  flex: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card-face {
+    animation: card-settle 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .card-face .foil-rule {
+    animation: rule-draw 420ms 380ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+  }
+}
+@keyframes card-settle {
+  0% {
+    transform: perspective(700px) rotateX(10deg) rotateZ(-3deg) translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: perspective(700px) rotateX(0deg) rotateZ(0deg) translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes rule-draw {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+.card-mark {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--card-accent);
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-body {
+  margin: auto 0;
+  text-align: center;
+}
+.card-name {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: clamp(14px, 7cqw, 27px);
+  font-weight: 600;
+  line-height: 1.15;
+}
+.card-name.placeholder {
+  /* Derived from --card-ink (not a fixed rgba) so it stays legible across
+     every card theme: dark-on-light for beige, light-on-dark for teal/ink. */
+  color: color-mix(in srgb, var(--card-ink) 38%, transparent);
+}
+.card-role {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--card-ink) 85%, transparent);
+  min-height: 16px;
+  margin-top: 4px;
+}
+.foil-rule {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--card-accent), transparent);
+}
+
+/* ---- section rhythm ---- */
+.panel {
+  margin-top: 26px;
+}
+.panel h2 {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+/* ---- form ---- */
+.field {
+  margin-bottom: 14px;
+  scroll-margin-top: var(--chrome-scroll-clearance);
+}
+.field label {
+  display: block;
+  font-size: 12.5px;
+  color: rgba(241, 239, 232, 0.62);
+  margin-bottom: 6px;
+}
+.field input {
+  width: 100%;
+  font: inherit;
+  /* iOS Safari zooms the page on focus for any text input under 16px —
+     jarring on a form this size. Keep every focusable form field at 16px
+     or above app-wide. */
+  font-size: 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--stage-line);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.theme-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.custom-color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  appearance: none;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-swatch {
+  position: relative;
+  width: 44px;
+  height: 32px;
+  flex: 0 0 44px;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  margin: 0;
+}
+.theme-swatch[data-selected="true"] {
+  border-color: var(--accent-bright);
+}
+.theme-swatch-color {
+  display: block;
+  width: 34px;
+  height: 22px;
+  /* Same ID-1 card ratio as .card-face, so each swatch reads as a tiny
+     preview of the actual card shape rather than an abstract color chip. */
+  aspect-ratio: 85.6 / 54;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.theme-swatch-color[data-theme="beige"] {
+  background: #f3ecd9;
+}
+.theme-swatch-color[data-theme="teal"] {
+  background: #146c67;
+}
+.theme-swatch-color[data-theme="ink"] {
+  background: #0f1f1b;
+}
+/* The 4th, user-editable slot before a color's been picked for this card —
+   same dashed "tap to add" language as .add-card-tile elsewhere. */
+.theme-swatch-color-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--stage-line);
+  color: rgba(241, 239, 232, 0.45);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1;
+}
+.social-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.social-row select {
+  flex: 0 0 40%;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--stage-line);
+  border-radius: 10px;
+  padding: 11px 8px;
+}
+.scan-field-row select {
+  flex: 0 0 104px;
+  min-width: 0;
+}
+.social-row input {
+  flex: 1;
+}
+.scan-field-row input {
+  min-width: 0;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--stage-line);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.scan-field-row input:focus,
+.scan-field-row select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.social-row button {
+  flex: 0 0 auto;
+  width: 38px;
+  border: 1px solid var(--stage-line);
+  background: transparent;
+  color: rgba(241, 239, 232, 0.5);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.add-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--accent-bright);
+  font-size: 13.5px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* ---- buttons ---- */
+.btn {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--text);
+}
+.btn-primary:hover {
+  background: var(--accent-bright);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--stage-line);
+}
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+}
+.btn-row .btn {
+  flex: 1;
+}
+/* `display: flex` above has the same specificity as the UA stylesheet's
+   `[hidden] { display: none }` and wins the tie (author beats UA
+   regardless of source order), so setting the `hidden` property alone
+   silently does nothing without this override. */
+.btn-row[hidden] {
+  display: none;
+}
+.share-hint {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+.btn-block {
+  display: block;
+  width: 100%;
+  margin-top: 28px;
+}
+.vcard-actions {
+  margin-top: 28px;
+}
+.vcard-actions .btn-block {
+  margin-top: 10px;
+}
+.vcard-actions .btn-block:first-child {
+  margin-top: 0;
+}
+.form-delete-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 14px;
+  background: none;
+  border: none;
+  color: rgba(241, 239, 232, 0.4);
+  font-size: 13px;
+  cursor: pointer;
+}
+.form-delete-btn:hover {
+  color: #c96a4e;
+}
+
+/* ---- top bar (list toggle / back) ---- */
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--stage);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: var(--chrome-height);
+  flex: 0 0 auto;
+  margin: -28px -20px 10px;
+  padding: calc(max(env(safe-area-inset-top), 0px) + var(--chrome-top-space)) 20px var(--chrome-bottom-space);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.top-bar.top-bar-back {
+  justify-content: flex-start;
+  gap: 10px;
+}
+/* Only used where a back bar also needs a trailing actions group (e.g.
+   Received Cards); plain back(+title) bars keep the flex-start rule above
+   so their content stays pinned to the left instead of being spread out. */
+.top-bar.top-bar-split {
+  justify-content: space-between;
+}
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+.top-bar-title,
+.stack-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.top-bar-done-btn {
+  min-width: 44px;
+  min-height: 38px;
+  border: none;
+  background: none;
+  color: var(--accent-bright);
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+.top-bar-cancel-btn {
+  min-width: 44px;
+  min-height: 38px;
+  border: none;
+  background: none;
+  color: rgba(241, 239, 232, 0.5);
+  font-size: 14.5px;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stage-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+/* ---- "more" dropdown menu, anchored under the header button ---- */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+  background: var(--stage);
+  border: 1px solid var(--stage-line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.65);
+  z-index: 40;
+}
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.dropdown-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ---- first-run onboarding overlay (renderStack in views.ts) ---- */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.onboarding-panel {
+  width: 100%;
+  max-width: 360px;
+  padding: 24px 22px;
+  border-radius: 16px;
+  background: var(--stage);
+  border: 1px solid var(--stage-line);
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.6);
+}
+.onboarding-panel h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.onboarding-steps {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+.onboarding-privacy {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  color: rgba(241, 239, 232, 0.6);
+}
+.onboarding-dont-show {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: rgba(241, 239, 232, 0.75);
+  cursor: pointer;
+}
+.onboarding-dont-show input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.list-empty {
+  text-align: center;
+  color: rgba(241, 239, 232, 0.5);
+  font-size: 13.5px;
+  padding: 24px 0;
+}
+/* Body copy (e.g. the AI Recognition explainer) reads better left-aligned
+   than centered like the empty-state messages `.list-empty` is meant for. */
+.settings-description {
+  text-align: left;
+  color: rgba(241, 239, 232, 0.6);
+  font-size: 13.5px;
+  line-height: 1.5;
+  /* `.panel`'s own `margin-top: 26px` already provides the gap down to the
+     next section — no bottom spacing needed here, and margin is reset
+     since a bare <p>'s browser-default margin would stack on top of it. */
+  margin: 0;
+}
+.privacy-panel p {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: rgba(241, 239, 232, 0.75);
+}
+.privacy-panel p:last-child {
+  margin-bottom: 0;
+}
+.privacy-panel p.privacy-tagline {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--stage-line);
+  color: var(--text);
+  font-weight: 600;
+}
+.about-panel {
+  text-align: center;
+}
+.about-app-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+.about-version {
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgba(241, 239, 232, 0.5);
+}
+.about-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.about-link {
+  color: var(--accent-bright);
+  font-size: 14px;
+  text-decoration: none;
+}
+.about-section {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--stage-line);
+}
+/* Plain label, not `.panel h2`'s uppercase/wide-letter-spacing treatment —
+   that combination reads fine for Latin text but visibly thins out CJK
+   characters (see the stack-title fix), and this heading is translated. */
+.about-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(241, 239, 232, 0.5);
+}
+.about-credits {
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(241, 239, 232, 0.5);
+}
+.about-credits a {
+  color: inherit;
+}
+.about-copyright {
+  margin-top: 16px;
+  font-size: 12px;
+  color: rgba(241, 239, 232, 0.4);
+}
+.privacy-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  font-size: 10px;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+  vertical-align: -1px;
+  cursor: pointer;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 2px;
+  border-top: 1px solid var(--stage-line);
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+.settings-row:first-child {
+  border-top: none;
+}
+.settings-row .locale-check {
+  color: var(--accent);
+  font-weight: 700;
+}
+.settings-row-static {
+  cursor: default;
+}
+.ai-lang-size {
+  color: rgba(241, 239, 232, 0.4);
+  font-size: 12px;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---- stack (home) view — Apple Wallet style cascade ---- */
+.stack-header {
+  /* sticky (not just relative) so this doubles as the home page's own
+     always-visible title bar, same as .top-bar elsewhere — still
+     establishes a positioning context for .dropdown-menu's absolute
+     anchor below, same as plain `relative` did. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--stage);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--chrome-height);
+  flex: 0 0 auto;
+  margin: -28px -20px 14px;
+  padding: calc(max(env(safe-area-inset-top), 0px) + var(--chrome-top-space)) 20px var(--chrome-bottom-space);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.stack-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+/* Every icon here is a hand-drawn CSS shape, not from an icon set or SVG
+   asset: bold solid fills read more clearly at 16-18px on a dark
+   background than outline-style icons do, and match this app's own
+   visual language (overlapping card rectangles, solid blocks) better
+   than literal/realistic icon-set glyphs would. */
+.wallet-icon {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 13px;
+}
+.wallet-icon::before,
+.wallet-icon::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 9px;
+  border: 1.4px solid currentColor;
+  border-radius: 2px;
+}
+.wallet-icon::before {
+  top: 0;
+  left: 0;
+  background: var(--stage);
+}
+.wallet-icon::after {
+  top: 4px;
+  left: 2px;
+  background: var(--stage);
+}
+.grid-icon {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+}
+.grid-icon span {
+  background: currentColor;
+  border-radius: 1px;
+}
+/* Solid silhouette (body + viewfinder bump filled, lens punched out as a
+   background-colored hole) reads clearer at this size than an outline
+   camera glyph, and matches the grid icon's solid-fill boldness. */
+.camera-icon {
+  position: relative;
+  display: block;
+  width: 17px;
+  height: 12px;
+  margin-top: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+.camera-icon::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 3px;
+  width: 6px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px 2px 0 0;
+}
+.camera-icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  background: var(--stage);
+  border-radius: 50%;
+}
+.stack-list {
+  position: relative;
+}
+.stack-item {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+/* Card height is fixed by the ID-1 aspect-ratio, so its px value is a
+   function of the container width. margin-top percentages resolve
+   against that same container width (even for a vertical margin — a CSS
+   quirk we rely on here), so this stays a constant "sliver" of revealed
+   card regardless of viewport size without any JS measuring. */
+.stack-item + .stack-item {
+  margin-top: calc(-63.1% + 58px);
+}
+/* Grid layout (Received Cards only): plain 2-column tiles, no cascade —
+   this selector out-specifies the cascade rule above so it wins without
+   needing !important. */
+.stack-list.grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.stack-list.grid-layout .stack-item,
+.stack-list.grid-layout .stack-item + .stack-item {
+  margin-top: 0;
+}
+.add-card-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 85.6 / 54;
+  margin-top: 20px;
+  border: 1.5px dashed var(--stage-line);
+  border-radius: 18px;
+  background: none;
+  color: rgba(241, 239, 232, 0.45);
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+}
+.add-card-tile:hover {
+  color: var(--accent-bright);
+  border-color: var(--accent);
+}
+
+/* ---- contact sheet (owner saved view + recipient view) ---- */
+.sheet-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid var(--stage-line);
+}
+.sheet-row:first-child {
+  border-top: none;
+}
+.sheet-row dt {
+  font-size: 12px;
+  color: rgba(241, 239, 232, 0.5);
+  flex: 0 0 auto;
+}
+.sheet-row dd {
+  margin: 0;
+  text-align: right;
+  font-size: 14.5px;
+}
+.sheet-row a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent);
+}
+dl.sheet {
+  margin: 0;
+}
+/* Only used for photo cards (see identitySummaryHtml in card-view.ts) — a
+   regular Mine/Recipient card already shows this on its own card face. */
+.sheet-identity-name {
+  font-size: 19px;
+  font-weight: 700;
+}
+.sheet-identity-role {
+  font-size: 13.5px;
+  color: rgba(241, 239, 232, 0.6);
+  margin-top: 2px;
+}
+
+.footer-mark {
+  margin-top: auto;
+  padding-top: 34px;
+  text-align: center;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: rgba(241, 239, 232, 0.35);
+}
+.footer-mark a {
+  color: rgba(241, 239, 232, 0.5);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: var(--card);
+  color: var(--card-ink);
+  font-size: 13.5px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-6px);
+}
+
+.own-card-cta {
+  display: block;
+  text-align: center;
+  margin-top: 22px;
+  font-size: 13.5px;
+  color: var(--accent-bright);
+  text-decoration: none;
+}
+.save-fallback {
+  margin-top: 28px;
+}
+.save-fallback p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(241, 239, 232, 0.6);
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.error-panel {
+  margin-top: 60px;
+  text-align: center;
+}
+.error-panel h1 {
+  font-size: 19px;
+  margin: 0 0 8px;
+}
+.error-panel p {
+  color: rgba(241, 239, 232, 0.6);
+  font-size: 14px;
+}

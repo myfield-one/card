@@ -1,0 +1,18 @@
+My Card
+
+Copyright 2026 OPENTECH AI PTE. LTD.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles the following third-party components:
+
+- qrcode-generator, Copyright (c) 2009 Kazuhiko Arase, MIT License.
+  Vendored at src/vendor/qrcode.mjs. See
+  http://www.opensource.org/licenses/mit-license.php
+- Tesseract.js, Apache License 2.0. Engine script, worker, wasm core, and
+  language traineddata vendored under public/tesseract/. See
+  https://github.com/naptha/tesseract.js
+
+Each component retains its own license, reproduced above and/or in its
+vendored source file. This NOTICE file is provided for informational
+purposes and does not modify the License.

@@ -1,0 +1,141 @@
+{
+  "$id": "https://card.myfield.one/v1/schemas/card-data.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CardData",
+  "description": "Portable My Card payload. Source of truth: src/crypto.ts. Not yet served over HTTP.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "contact"],
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "Payload schema version. v2 is a breaking replacement for the pre-launch v1 draft shape."
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Random UUID assigned when a Mine card is first created. Carried inside the encrypted share payload so a recipient can dedupe re-shares from the same card."
+    },
+    "contact": { "$ref": "#/$defs/contactInfo" },
+    "profile": { "$ref": "#/$defs/cardProfile" },
+    "assets": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/cardAsset" }
+    }
+  },
+  "$defs": {
+    "contactInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fn"],
+      "properties": {
+        "fn": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Formatted name, equivalent to vCard FN. May be empty for photo-only cards before recognition."
+        },
+        "title": { "type": "string", "maxLength": 2048 },
+        "org": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Organization name, equivalent to vCard ORG."
+        },
+        "phones": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/contactValue" }
+        },
+        "emails": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/contactValue" }
+        },
+        "addresses": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/contactValue" }
+        },
+        "urls": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/contactValue" }
+        }
+      }
+    },
+    "contactValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "type": {
+          "enum": ["work", "home", "mobile", "main", "other"],
+          "description": "vCard-style TYPE hint. Consumers should treat it as advisory."
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Human-facing label, used by URL/social rows for platform names such as Website, LinkedIn, or GitHub."
+        },
+        "value": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "cardProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "theme": {
+          "enum": ["beige", "teal", "ink", "custom"],
+          "description": "Display preference only; not part of the contact identity."
+        },
+        "customColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Only meaningful when theme is \"custom\"."
+        }
+      }
+    },
+    "cardAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "mediaType"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "kind": { "enum": ["cardPhoto", "avatar", "logo"] },
+        "mediaType": { "type": "string", "maxLength": 80 },
+        "dataUrl": {
+          "type": "string",
+          "pattern": "^data:image/[-+.A-Za-z0-9]+;base64,"
+        },
+        "previewDataUrl": {
+          "type": "string",
+          "pattern": "^data:image/[-+.A-Za-z0-9]+;base64,",
+          "description": "Optional local-only thumbnail cache. It may be omitted, regenerated, or discarded."
+        },
+        "sourceRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["store", "id"],
+          "properties": {
+            "store": { "const": "assets" },
+            "id": { "type": "string", "format": "uuid" }
+          },
+          "description": "Reference to the local original asset object. Not portable."
+        },
+        "transform": { "$ref": "#/$defs/photoTransform" },
+        "localOnly": { "type": "boolean" }
+      }
+    },
+    "photoTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rotate", "scale", "offsetX", "offsetY"],
+      "properties": {
+        "rotate": { "enum": [0, 90, 180, 270] },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 3 },
+        "offsetX": { "type": "number", "minimum": -2, "maximum": 2 },
+        "offsetY": { "type": "number", "minimum": -2, "maximum": 2 }
+      }
+    }
+  }
+}

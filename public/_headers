@@ -1,0 +1,42 @@
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'none'; manifest-src 'none'; upgrade-insecure-requests
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: geolocation=(), microphone=(), payment=(), usb=(), serial=(), bluetooth=()
+
+/
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/404.html
+  Cache-Control: no-cache, max-age=0, must-revalidate
+  X-Robots-Tag: noindex
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/social-card-v1.png
+  Cache-Control: public, max-age=604800, immutable
+
+/logo-192.png
+  Cache-Control: public, max-age=300, must-revalidate
+
+/logo-512.png
+  Cache-Control: public, max-age=300, must-revalidate
+
+/favicon.ico
+  Cache-Control: public, max-age=300, must-revalidate
+
+/favicon-32x32.png
+  Cache-Control: public, max-age=300, must-revalidate
+
+/apple-touch-icon-180.png
+  Cache-Control: public, max-age=300, must-revalidate
+
+/apple-touch-icon-precomposed.png
+  Cache-Control: public, max-age=300, must-revalidate
+
+/tesseract/*
+  Cache-Control: public, max-age=604800, must-revalidate

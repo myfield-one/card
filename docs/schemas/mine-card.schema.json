@@ -1,0 +1,31 @@
+{
+  "$id": "https://card.myfield.one/v1/schemas/mine-card.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MineCard",
+  "description": "One locally authored card in IndexedDB database mycard, object store mine. Source of truth: src/storage.ts. Not served over HTTP.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "contact", "updatedAt"],
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "Payload schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "contact": { "$ref": "card-data.schema.json#/$defs/contactInfo" },
+    "profile": { "$ref": "card-data.schema.json#/$defs/cardProfile" },
+    "assets": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "card-data.schema.json#/$defs/cardAsset" }
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp for the last local edit."
+    }
+  }
+}

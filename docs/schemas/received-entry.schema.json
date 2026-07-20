@@ -1,0 +1,18 @@
+{
+  "$id": "https://card.myfield.one/v1/schemas/received-entry.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReceivedEntry",
+  "description": "One entry in the local Received Cards IndexedDB store (database \"mycard\", object store \"received\", keyPath \"id\"). Source of truth: src/storage.ts. Not served over HTTP.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "receivedAt", "data"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Local IndexedDB key. Share-link contacts are deduped against CardData.id; locally captured photo cards use the same value as data.id."
+    },
+    "receivedAt": { "type": "string", "format": "date-time" },
+    "data": { "$ref": "card-data.schema.json" }
+  }
+}
