@@ -628,20 +628,11 @@ function vcardFilename(data: CardData): string {
   return `${safe}.vcf`;
 }
 
-function vcardDataUri(data: CardData): string {
+function vcardDownloadHref(data: CardData): string {
   const bytes = new TextEncoder().encode(buildVCard(data));
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   return `data:text/vcard;charset=utf-8;base64,${btoa(binary)}`;
-}
-
-function downloadVCard(data: CardData): void {
-  const a = document.createElement("a");
-  a.href = vcardDataUri(data);
-  a.download = vcardFilename(data);
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 function downloadBlob(bytes: BlobPart, filename: string, type: string): void {
@@ -684,12 +675,14 @@ async function openVCardWithApps(data: CardData): Promise<void> {
 
 function vcardActionsHtml(data: CardData, prefix: string): string {
   const canOpen = canOpenVCardWithApps(data);
+  const href = vcardDownloadHref(data);
+  const filename = vcardFilename(data);
   const openButton = canOpen
     ? `<button class="btn btn-secondary" id="${prefix}-open-vcard-btn" type="button">${esc(t("openWithApps"))}</button>`
     : "";
   return `
     <div class="vcard-actions${canOpen ? " btn-row" : ""}">
-      <button class="btn btn-primary${canOpen ? "" : " btn-block"}" id="${prefix}-download-vcard-btn" type="button">${esc(t("downloadVCard"))}</button>
+      <a class="btn btn-primary${canOpen ? "" : " btn-block"}" id="${prefix}-download-vcard-link" href="${esc(href)}" download="${esc(filename)}" type="text/vcard">${esc(t("downloadVCard"))}</a>
       ${openButton}
     </div>
   `;
@@ -771,7 +764,6 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
     return;
   }
 
-  document.getElementById("recipient-download-vcard-btn")!.addEventListener("click", () => downloadVCard(data));
   document.getElementById("recipient-open-vcard-btn")?.addEventListener("click", () => void openVCardWithApps(data));
 }
 
@@ -1414,7 +1406,6 @@ async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promis
   });
 
   if (hasRecognizedContact) {
-    document.getElementById("photo-download-vcard-btn")!.addEventListener("click", () => downloadVCard(entry.data));
     document.getElementById("photo-open-vcard-btn")?.addEventListener("click", () => void openVCardWithApps(entry.data));
   }
 
