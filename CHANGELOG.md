@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.4 - 2026-08-06
+
+- Improved vCard download compatibility on newer iOS releases by rendering
+  single-card downloads as direct download links instead of simulated clicks.
+- Updated About and Privacy product references from My Card to Card Field.
+
 ## 0.9.3 - 2026-07-16
 
 - Added encrypted multi-device sync for My Cards, Received Cards, and original

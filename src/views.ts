@@ -1723,7 +1723,7 @@ function renderAboutPage(): void {
       <span class="top-bar-title">${esc(t("about"))}</span>
     </div>
     <div class="panel about-panel">
-      <div class="about-app-name">My Card</div>
+      <div class="about-app-name">Card Field</div>
       <div class="about-version">Version ${esc(APP_VERSION)}</div>
       <div class="about-links">
         <a class="about-link" href="https://myfield.one" target="_blank" rel="noopener">myfield.one</a>

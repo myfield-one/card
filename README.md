@@ -1,4 +1,4 @@
-# My Card
+# Card Field
 
 Privacy-first digital business card, built as a standalone static site:
 fully client-side, no backend, no account required.
@@ -7,7 +7,7 @@ Website: [card.myfield.one](https://card.myfield.one)
 
 ## Features
 
-- **My Cards** — create and manage your cards.
+- **My Card** — create and manage your cards.
 - **Share** — generate encrypted card links.
 - **Received Cards** — keep cards you receive or photograph.
 - **AI recognition** — optional on-device OCR for physical cards.
