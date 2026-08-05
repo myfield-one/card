@@ -1713,7 +1713,7 @@ function renderExportDataPage(): void {
 // here rather than run through t() — same reasoning as the brand names
 // elsewhere: this is legal/attribution text, not conversational UI copy,
 // and most apps show it untranslated regardless of locale.
-const APP_VERSION = "0.9.3";
+const APP_VERSION = "0.9.4";
 
 function renderAboutPage(): void {
   currentView = { kind: "other" };
