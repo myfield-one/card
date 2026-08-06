@@ -14,6 +14,7 @@ function hasContactData(data: CardData): boolean {
   return Boolean(
     contact.fn ||
     contact.title ||
+    contact.tagline ||
     contact.department ||
     contact.org ||
     contact.note ||

@@ -15,6 +15,7 @@ export interface ContactInfo {
   fn: string;
   title?: string;
   org?: string;
+  tagline?: string;
   department?: string;
   note?: string;
   phones?: ContactValue[];
@@ -105,6 +106,7 @@ function normalizeContactInfo(value: unknown): ContactInfo | null {
   const contact: ContactInfo = { fn };
   const title = cleanString(value.title)?.trim();
   const org = cleanString(value.org)?.trim();
+  const tagline = cleanString(value.tagline)?.trim();
   const department = cleanString(value.department)?.trim();
   const note = cleanString(value.note)?.trim();
   const phones = normalizeContactValues(value.phones);
@@ -114,6 +116,7 @@ function normalizeContactInfo(value: unknown): ContactInfo | null {
 
   if (title) contact.title = title;
   if (org) contact.org = org;
+  if (tagline) contact.tagline = tagline;
   if (department) contact.department = department;
   if (note) contact.note = note;
   if (phones) contact.phones = phones;

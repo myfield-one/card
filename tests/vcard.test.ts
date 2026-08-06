@@ -13,6 +13,7 @@ test("buildVCard exports repeated contact values and URL labels", () => {
       title: "Founder",
       org: "Analytical Engines",
       department: "Research",
+      tagline: "Privacy-first cards",
       note: "Published in 1843",
       phones: [
         { type: "mobile", value: "+44 20 0000 0000" },
@@ -21,7 +22,7 @@ test("buildVCard exports repeated contact values and URL labels", () => {
       emails: [{ type: "work", value: "ada@example.com" }],
       addresses: [{ type: "home", value: "1 Example Street" }],
       urls: [
-        { label: "LinkedIn", value: "https://linkedin.com/in/ada" },
+        { label: "LinkedIn", value: "https://www.linkedin.com/in/ada" },
         { value: "https://example.com" },
       ],
     },
@@ -32,7 +33,7 @@ test("buildVCard exports repeated contact values and URL labels", () => {
     [
       "BEGIN:VCARD",
       "VERSION:3.0",
-      "N:Ada Lovelace;;;;",
+      "N:;Ada Lovelace;;;",
       "FN:Ada Lovelace",
       "TITLE:Founder",
       "ORG:Analytical Engines;Research",
@@ -40,9 +41,61 @@ test("buildVCard exports repeated contact values and URL labels", () => {
       "TEL;TYPE=WORK:+44 20 0000 0001",
       "EMAIL;TYPE=WORK:ada@example.com",
       "ADR;TYPE=HOME:;;1 Example Street;;;;",
-      "URL;TYPE=LINKEDIN:https://linkedin.com/in/ada",
+      "URL;TYPE=LINKEDIN:https://www.linkedin.com/in/ada",
       "URL;TYPE=WEBSITE:https://example.com",
-      "NOTE:Published in 1843",
+      "NOTE:Privacy-first cards\\n\\nPublished in 1843",
+      "END:VCARD",
+    ].join("\r\n"),
+  );
+});
+
+test("buildVCard exports tagline alone as NOTE", () => {
+  const card: CardData = {
+    v: 2,
+    id: "11111111-1111-4111-8111-111111111111",
+    contact: {
+      fn: "Ada Lovelace",
+      tagline: "Privacy-first cards",
+    },
+  };
+
+  assert.equal(
+    buildVCard(card),
+    [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      "N:;Ada Lovelace;;;",
+      "FN:Ada Lovelace",
+      "NOTE:Privacy-first cards",
+      "END:VCARD",
+    ].join("\r\n"),
+  );
+});
+
+test("buildVCard exports known social handles as full URLs", () => {
+  const card: CardData = {
+    v: 2,
+    id: "11111111-1111-4111-8111-111111111111",
+    contact: {
+      fn: "Ada Lovelace",
+      urls: [
+        { label: "LinkedIn", value: "ada-lovelace" },
+        { label: "Bluesky", value: "@ada.bsky.social" },
+        { label: "Other", value: "hello" },
+      ],
+    },
+  };
+
+  assert.equal(
+    buildVCard(card),
+    [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      "N:;Ada Lovelace;;;",
+      "FN:Ada Lovelace",
+      "URL;TYPE=LINKEDIN:https://www.linkedin.com/in/ada-lovelace",
+      "URL;TYPE=BLUESKY:https://bsky.app/profile/ada.bsky.social",
+      "URL;TYPE=OTHER:hello",
       "END:VCARD",
     ].join("\r\n"),
   );
@@ -66,7 +119,7 @@ test("buildVCard escapes reserved vCard characters", () => {
     [
       "BEGIN:VCARD",
       "VERSION:3.0",
-      "N:Ada\\, Lovelace;;;;",
+      "N:;Ada\\, Lovelace;;;",
       "FN:Ada\\, Lovelace",
       "ORG:A\\;B\\\\C;R&D\\;Lab",
       "ADR;TYPE=OTHER:;;Line 1\\nLine 2;;;;",
@@ -93,7 +146,7 @@ test("buildVCard escapes bare carriage returns to prevent line injection", () =>
     [
       "BEGIN:VCARD",
       "VERSION:3.0",
-      "N:Ada\\nURL:https://evil.example;;;;",
+      "N:;Ada\\nURL:https://evil.example;;;",
       "FN:Ada\\nURL:https://evil.example",
       "ORG:Example\\nTITLE:Injected;Research\\nTEL:Injected",
       "NOTE:Note\\nURL:Injected",
@@ -118,7 +171,7 @@ test("buildVCard uses organization as display name when fn is empty", () => {
     [
       "BEGIN:VCARD",
       "VERSION:3.0",
-      "N:Example Inc.;;;;",
+      "N:;;;;",
       "FN:Example Inc.",
       "ORG:Example Inc.",
       "URL;TYPE=WEBSITE:https://example.com",

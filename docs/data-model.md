@@ -31,6 +31,7 @@ interface CardData {
 | `fn` | `FN` | May be empty before a photo card is recognized. |
 | `title` | `TITLE` | Optional. |
 | `org` | `ORG` | Optional organization name. |
+| `tagline` | `NOTE` | Optional short public line shown on the card face; exported before `note` in `NOTE`. |
 | `department` | `ORG` | Optional organization unit; exported as `ORG:Company;Department`. |
 | `note` | `NOTE` | Optional free-form note. |
 | `phones[]` | `TEL` | Multiple values supported. |
@@ -41,7 +42,8 @@ interface CardData {
 Each contact value has `{ value, type?, label? }`. `type` is a small
 vCard-style hint (`work`, `home`, `mobile`, `main`, `other`). `label` is a
 human-facing label, mainly for URL/social platforms such as Website,
-LinkedIn, or GitHub.
+LinkedIn, GitHub, or Bluesky. Known social labels may store a handle or ID in
+`value`; rendering and vCard export resolve those into full profile URLs.
 
 `profile` stores My Card display preferences only, currently `theme` and
 `customColor`.

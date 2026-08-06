@@ -14,31 +14,6 @@ export function esc(value: unknown): string {
   return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-export function isSafeUrl(value: string | undefined): boolean {
-  return /^https?:\/\//i.test(value || "");
-}
-
-// A bare domain (e.g. "linkedin.com/in/jane", no "https://") is the common
-// case for a hand-typed or recognized social/website value, and shouldn't
-// silently render as unclickable plain text. Anchored start-to-end against
-// dot-separated alphanumeric labels plus an optional path, so it can't
-// match anything containing a space or a colon (rules out "javascript:",
-// "mailto:", plain prose, phone numbers, etc.) without needing a separate
-// scheme blocklist.
-const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/\S*)?$/i;
-
-export function isLinkableSocialValue(value: string | undefined): boolean {
-  return isSafeUrl(value) || BARE_DOMAIN_RE.test((value || "").trim());
-}
-
-// Only call once isLinkableSocialValue(value) is true — an already-"https?://"
-// value passes through untouched, a bare domain gets "https://" prepended
-// for the href while the visible text (see card-view.ts) stays exactly as
-// entered.
-export function toSocialHref(value: string): string {
-  return isSafeUrl(value) ? value : `https://${value.trim()}`;
-}
-
 let toastTimer: ReturnType<typeof setTimeout>;
 export function showToast(message: string): void {
   toastEl.textContent = message;

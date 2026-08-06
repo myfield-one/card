@@ -52,7 +52,8 @@ export function wireShareBack(container: ParentNode): void {
   const cardBack = container.querySelector<HTMLElement>(".card-back");
   const qrBtn = container.querySelector<HTMLButtonElement>("#card-back-qr-btn");
   if (!cardBack || !qrBtn) return;
-  qrBtn.addEventListener("click", () => {
+  qrBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
     cardBack.classList.toggle("is-zoomed");
   });
 }

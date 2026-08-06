@@ -155,13 +155,13 @@ body {
 }
 .card-back-name {
   position: absolute;
-  top: 18px;
+  top: 12px;
   left: 22px;
   right: 22px;
   overflow: hidden;
   color: var(--card-ink);
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(17px, 7cqw, 26px);
+  font-size: clamp(12.5px, 4.2cqw, 16px);
   font-weight: 700;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -171,12 +171,12 @@ body {
   /* Sized off the card's own width (not a fixed px) via the container
      query context .card-face already establishes, so it scales the same
      way the front's text does across the cascade/grid/full-width cases. */
-  width: 42cqw;
-  max-width: 160px;
+  width: 57cqw;
+  max-width: 208px;
   /* Fixed white tile regardless of card theme — the vendored encoder
      always emits black-on-white (see share-view.ts), so this keeps it
      scannable on the Deep Teal / Black card themes too. */
-  padding: 10px;
+  padding: 8px;
   background: #fff;
   border: none;
   border-radius: 10px;
@@ -184,7 +184,7 @@ body {
   transition: width 220ms ease, max-width 220ms ease;
 }
 .card-back-with-name .card-back-qr {
-  transform: translateY(10px);
+  transform: translateY(12px);
 }
 .card-back.is-zoomed .card-back-qr {
   width: 88%;
@@ -280,7 +280,7 @@ body {
 }
 .card-name {
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: clamp(14px, 7cqw, 27px);
+  font-size: clamp(17px, 7cqw, 27px);
   font-weight: 600;
   line-height: 1.15;
 }
@@ -290,12 +290,32 @@ body {
   color: color-mix(in srgb, var(--card-ink) 38%, transparent);
 }
 .card-role {
-  font-size: 12.5px;
+  font-size: 13px;
   color: color-mix(in srgb, var(--card-ink) 85%, transparent);
   min-height: 16px;
   margin-top: 4px;
 }
+.card-tagline {
+  position: absolute;
+  right: 7%;
+  bottom: clamp(27px, 9.4cqw, 37px);
+  left: 7%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--card-ink) 72%, transparent);
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-tagline.is-long {
+  font-size: 10.5px;
+}
 .foil-rule {
+  position: absolute;
+  right: 22px;
+  bottom: 16px;
+  left: 22px;
   height: 1px;
   background: linear-gradient(to right, transparent, var(--card-accent), transparent);
 }
@@ -780,6 +800,13 @@ body {
   border-top: 1px solid var(--stage-line);
   color: var(--text);
   font-weight: 600;
+}
+.sheet-url-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .about-panel {
   text-align: center;

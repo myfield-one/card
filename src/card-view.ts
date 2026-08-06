@@ -1,8 +1,9 @@
 import { CARD_THEMES, CARD_THEME_VALUES, type CardAsset, type CardData, type CardTheme, type ContactInfo, type ContactValue, type PhotoTransform } from "./crypto";
 import { normalizePhotoTransform } from "./crypto";
 import type { ReceivedEntry } from "./storage";
-import { esc, isHexColor, isLinkableSocialValue, toSocialHref } from "./dom";
+import { esc, isHexColor } from "./dom";
 import { t } from "./i18n";
+import { resolveSocialUrl } from "./social-url.ts";
 
 export function cardThemes(): { value: CardTheme; label: string }[] {
   const labels: Partial<Record<CardTheme, string>> = { beige: t("themeBeige"), teal: t("themeDeepTeal"), ink: t("themeBlack") };
@@ -19,6 +20,10 @@ function cardFaceRoleLine(data: { title?: string; org?: string }): string {
   return [data.title, data.org].filter(Boolean).join(" · ");
 }
 
+export function taglineClass(value: string): string {
+  return value.trim().length > 34 ? "card-tagline is-long" : "card-tagline";
+}
+
 export interface CardFaceOpts {
   cornerLabel?: string;
 }
@@ -31,6 +36,7 @@ export interface CardFaceData {
     fn: string;
     title?: string;
     org?: string;
+    tagline?: string;
     department?: string;
   };
   profile?: {
@@ -75,6 +81,7 @@ export function cardFaceHtml(data: CardFaceData | undefined, opts: CardFaceOpts 
   const nameHtml = name ? esc(name) : esc(t("myCard"));
   const nameClass = name ? "card-name" : "card-name placeholder";
   const role = cardFaceRoleLine(data?.contact || {});
+  const tagline = data?.contact.tagline?.trim() || "";
   const theme = (data && data.profile?.theme) || "beige";
   // No corner mark by default — the centered name already identifies the
   // card. A corner label is only worth showing where it's doing real work:
@@ -99,6 +106,7 @@ export function cardFaceHtml(data: CardFaceData | undefined, opts: CardFaceOpts 
         <div class="${nameClass}">${nameHtml}</div>
         <div class="card-role">${role ? esc(role) : "&nbsp;"}</div>
       </div>
+      ${tagline ? `<div class="${taglineClass(tagline)}">${esc(tagline)}</div>` : ""}
       <div class="foil-rule"></div>
     </div>
   `;
@@ -228,9 +236,10 @@ export function contactSheetHtml(data: CardData): string {
     rows.push(`<div class="sheet-row"><dt>${esc(t("address"))}</dt><dd>${esc(address.value)}</dd></div>`);
   }
   for (const url of data.contact.urls || []) {
-    const shown = isLinkableSocialValue(url.value)
-      ? `<a href="${esc(toSocialHref(url.value))}" target="_blank" rel="noopener">${esc(url.value)}</a>`
-      : esc(url.value);
+    const resolved = resolveSocialUrl(url.label, url.value);
+    const shown = resolved.href
+      ? `<a class="sheet-url-link" href="${esc(resolved.href)}" title="${esc(resolved.href)}" target="_blank" rel="noopener">${esc(resolved.display)}</a>`
+      : esc(resolved.display);
     rows.push(`<div class="sheet-row"><dt>${esc(url.label || "Website")}</dt><dd>${shown}</dd></div>`);
   }
   if (data.contact.note) {
@@ -245,7 +254,7 @@ const CONTACT_VALUE_TYPES_BY_KIND = {
   email: ["work", "home", "other"],
   address: ["work", "home", "other"],
 } as const;
-const SOCIAL_PLATFORMS = ["Website", "LinkedIn", "GitHub", "Instagram", "Facebook", "WhatsApp", "X (Twitter)", "Other"];
+const SOCIAL_PLATFORMS = ["Website", "LinkedIn", "GitHub", "Instagram", "Facebook", "YouTube", "TikTok", "Bluesky", "WhatsApp", "X (Twitter)", "Other"];
 
 function contactValueTypeOptions(kind: "phone" | "email" | "address", selected = "work"): string {
   const options = CONTACT_VALUE_TYPES_BY_KIND[kind];
@@ -261,15 +270,21 @@ function socialPlatformOptions(selected = "Website"): string {
   ).join("");
 }
 
+export function socialValuePlaceholder(label: string | undefined): string {
+  if ((label || "").trim().toLowerCase() === "whatsapp") return t("phoneNumberOrLinkPlaceholder");
+  return t("handleOrLinkPlaceholder");
+}
+
 export function contactValueRowHtml(kind: "phone" | "email" | "address" | "url", value?: ContactValue): string {
   const item = value || (kind === "url" ? { label: "Website", value: "" } : { type: kind === "phone" ? "mobile" : "work", value: "" });
   const selector = kind === "url"
     ? `<select data-contact-label>${socialPlatformOptions(item.label || "Website")}</select>`
     : `<select data-contact-type>${contactValueTypeOptions(kind, item.type)}</select>`;
+  const placeholder = kind === "url" ? socialValuePlaceholder(item.label || "Website") : "";
   return `
     <div class="social-row" data-contact-row="${esc(kind)}">
       ${selector}
-      <input data-contact-value placeholder="${esc(kind === "url" ? t("handleOrLinkPlaceholder") : "")}" value="${esc(item.value)}" />
+      <input data-contact-value placeholder="${esc(placeholder)}" value="${esc(item.value)}" />
       <button type="button" class="remove-social" data-remove-contact-value aria-label="${esc(t("remove"))}">&times;</button>
     </div>
   `;
@@ -299,6 +314,7 @@ export function collectFormData(form: HTMLFormElement): Omit<CardData, "id"> {
       fn: String(fd.get("fn") || "").trim(),
       title: String(fd.get("title") || "").trim(),
       org: String(fd.get("org") || "").trim(),
+      tagline: String(fd.get("tagline") || "").trim(),
       department: String(fd.get("department") || "").trim(),
       note: String(fd.get("note") || "").trim(),
       phones,

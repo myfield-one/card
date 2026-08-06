@@ -41,6 +41,11 @@
           "maxLength": 2048,
           "description": "Organization name, equivalent to vCard ORG."
         },
+        "tagline": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Short public line shown on the card face; exported before note in vCard NOTE."
+        },
         "department": {
           "type": "string",
           "maxLength": 2048,
@@ -85,7 +90,7 @@
         "label": {
           "type": "string",
           "maxLength": 80,
-          "description": "Human-facing label, used by URL/social rows for platform names such as Website, LinkedIn, or GitHub."
+          "description": "Human-facing label, used by URL/social rows for platform names such as Website, LinkedIn, GitHub, or Bluesky."
         },
         "value": { "type": "string", "minLength": 1, "maxLength": 2048 }
       }

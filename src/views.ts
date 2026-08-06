@@ -9,6 +9,7 @@ import {
   identitySummaryHtml,
   collectFormData,
   contactValueRowHtml,
+  socialValuePlaceholder,
   roleLine,
   stackCornerLabel,
   receivedEntryFaceHtml,
@@ -16,6 +17,7 @@ import {
   photoCardHtml,
   themePickerHtml,
   applyCardFaceTheme,
+  taglineClass,
 } from "./card-view";
 import {
   type MineCard,
@@ -62,6 +64,10 @@ import {
 } from "./sync/cloud";
 import type { createCardSyncController } from "./sync/card-sync-controller";
 
+declare const __APP_VERSION__: string;
+
+const APP_VERSION = __APP_VERSION__;
+
 type CurrentView =
   | { kind: "mine-stack" }
   | { kind: "mine-detail"; id: string }
@@ -82,6 +88,7 @@ function blankCardDraft(): Omit<MineCard, "id" | "updatedAt"> {
       fn: "",
       title: "",
       org: "",
+      tagline: "",
       department: "",
       note: "",
       phones: [{ type: "mobile", value: "" }],
@@ -184,6 +191,10 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
       <div class="field">
         <label>${esc(t("company"))}</label>
         <input name="org" value="${esc(data.contact.org)}" autocomplete="organization" />
+      </div>
+      <div class="field">
+        <label>${esc(t("tagline"))}</label>
+        <input name="tagline" value="${esc(data.contact.tagline)}" />
       </div>
       <div class="field">
         <label>${esc(t("phone"))}</label>
@@ -337,11 +348,31 @@ export async function renderEditor(existing: MineCard | null): Promise<void> {
     });
     cardRoleEl().textContent = role || " ";
   };
+  const updateTagline = () => {
+    const taglineEl = stage.querySelector(".card-tagline") as HTMLElement | null;
+    const tagline = (form.querySelector('[name="tagline"]') as HTMLInputElement).value.trim();
+    if (taglineEl) {
+      taglineEl.textContent = tagline;
+      taglineEl.className = taglineClass(tagline);
+      if (!tagline) taglineEl.remove();
+      return;
+    }
+    if (!tagline) return;
+    stage.querySelector(".card-body")!.insertAdjacentHTML("afterend", `<div class="${taglineClass(tagline)}">${esc(tagline)}</div>`);
+  };
   form.querySelector('[name="title"]')!.addEventListener("input", updateRole);
   form.querySelector('[name="org"]')!.addEventListener("input", updateRole);
+  form.querySelector('[name="tagline"]')!.addEventListener("input", updateTagline);
   form.addEventListener("input", (e) => {
     const target = e.target as HTMLElement;
     if (target.matches('[name="department"]')) updateRole();
+  });
+  form.addEventListener("change", (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.matches("[data-contact-label]")) return;
+    const row = target.closest("[data-contact-row]");
+    const input = row?.querySelector<HTMLInputElement>("[data-contact-value]");
+    if (input) input.placeholder = socialValuePlaceholder((target as HTMLSelectElement).value);
   });
 
   form.addEventListener("click", (e) => {
@@ -443,6 +474,7 @@ export function renderDetail(data: MineCard): void {
   // re-render, and both other exits below (back, edit) leave Detail
   // entirely anyway, so there's nothing to restore it from.
   let sharing = false;
+  let shareUrl: string | undefined;
 
   // Swap-at-90°: fade+rotate the wrapper out, swap its innerHTML at the
   // midpoint, then animate back in — see style.css's .card-flip rules.
@@ -457,6 +489,35 @@ export function renderDetail(data: MineCard): void {
     }, 150);
   };
 
+  const getShareUrl = async (): Promise<string> => {
+    if (shareUrl) return shareUrl;
+    const fragment = await encodeCardFragment(data);
+    shareUrl = `${location.origin}${location.pathname}#${fragment}`;
+    return shareUrl;
+  };
+
+  const showFront = (): void => {
+    flipTo(cardFaceHtml(data));
+    infoEl.innerHTML = contactSheetHtml(data);
+    footerEl.textContent = t("onlyYouCanEditOrShare");
+  };
+
+  const showBack = async (): Promise<string> => {
+    const url = await getShareUrl();
+    flipTo(shareBackHtml(url, data.profile?.theme || "beige", data.profile?.customColor, data.contact.fn), () => wireShareBack(flip));
+    return url;
+  };
+
+  const showShareDetails = (url: string): void => {
+    infoEl.innerHTML = shareActionsHtml();
+    wireShareActions(infoEl, url);
+    footerEl.innerHTML = `${esc(t("shareServerPrivacyNote"))} <button type="button" class="privacy-info-btn" id="privacy-info-btn" aria-label="${esc(t("privacyInfoAriaLabel"))}">i</button>`;
+    document.getElementById("privacy-info-btn")!.addEventListener("click", () => {
+      if (sharing) history.replaceState(null, "", location.pathname);
+      renderPrivacyPage();
+    });
+  };
+
   const exitShare = (): void => {
     // Always replaceState (never history.back()) — this app has no
     // general in-app back-stack, and main.ts's hashchange listener
@@ -464,40 +525,35 @@ export function renderDetail(data: MineCard): void {
     // away the flip-back animation below and jump straight to the card
     // stack instead of just returning to this Detail view.
     history.replaceState(null, "", location.pathname);
-    flipTo(cardFaceHtml(data));
-    infoEl.innerHTML = contactSheetHtml(data);
+    showFront();
     actionsRow.hidden = false;
     topActionsEl.innerHTML = "";
-    footerEl.textContent = t("onlyYouCanEditOrShare");
     sharing = false;
   };
 
   const enterShare = async (): Promise<void> => {
-    const fragment = await encodeCardFragment(data);
-    const url = `${location.origin}${location.pathname}#${fragment}`;
+    if (sharing) return;
+    const url = await showBack();
     // Visible address bar = the share link, so the browser's own native
     // share/forward affordance (offered below as a fallback) actually
     // shares the right thing. pushState, not a real navigation, so it
     // doesn't fire hashchange/reload the app.
     history.pushState({ mycardShare: true }, "", url);
 
-    flipTo(shareBackHtml(url, data.profile?.theme || "beige", data.profile?.customColor, data.contact.fn), () => wireShareBack(flip));
-    infoEl.innerHTML = shareActionsHtml();
-    wireShareActions(infoEl, url);
+    showShareDetails(url);
     actionsRow.hidden = true;
     topActionsEl.innerHTML = `<button type="button" class="top-bar-done-btn" id="share-done-btn">${esc(t("done"))}</button>`;
     document.getElementById("share-done-btn")!.addEventListener("click", exitShare);
-    // The full explanation (local-first storage, the link's key-in-the-
-    // fragment mechanism, and recommended sharing channels) lives once
-    // in Settings → Privacy & Security — this just links there rather
-    // than duplicating it in a popover.
-    footerEl.innerHTML = `${esc(t("shareServerPrivacyNote"))} <button type="button" class="privacy-info-btn" id="privacy-info-btn" aria-label="${esc(t("privacyInfoAriaLabel"))}">i</button>`;
-    document.getElementById("privacy-info-btn")!.addEventListener("click", () => {
-      history.replaceState(null, "", location.pathname);
-      renderPrivacyPage();
-    });
     sharing = true;
   };
+
+  flip.addEventListener("click", () => {
+    if (sharing) {
+      exitShare();
+      return;
+    }
+    void enterShare();
+  });
 
   document.getElementById("detail-back-btn")!.addEventListener("click", () => {
     if (sharing) history.replaceState(null, "", location.pathname);
@@ -628,13 +684,6 @@ function vcardFilename(data: CardData): string {
   return `${safe}.vcf`;
 }
 
-function vcardDownloadHref(data: CardData): string {
-  const bytes = new TextEncoder().encode(buildVCard(data));
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return `data:text/vcard;charset=utf-8;base64,${btoa(binary)}`;
-}
-
 function downloadBlob(bytes: BlobPart, filename: string, type: string): void {
   const url = URL.createObjectURL(new Blob([bytes], { type }));
   const a = document.createElement("a");
@@ -650,8 +699,12 @@ function downloadTextFile(text: string, filename: string, type: string): void {
   downloadBlob(text, filename, type);
 }
 
+function vcardBlobUrl(data: CardData): string {
+  return URL.createObjectURL(new Blob([buildVCard(data)], { type: "text/vcard;charset=utf-8" }));
+}
+
 function vcardFile(data: CardData): File {
-  return new File([buildVCard(data)], vcardFilename(data), { type: "text/vcard" });
+  return new File([buildVCard(data)], vcardFilename(data), { type: "text/vcard;charset=utf-8" });
 }
 
 function canOpenVCardWithApps(data: CardData): boolean {
@@ -675,17 +728,29 @@ async function openVCardWithApps(data: CardData): Promise<void> {
 
 function vcardActionsHtml(data: CardData, prefix: string): string {
   const canOpen = canOpenVCardWithApps(data);
-  const href = vcardDownloadHref(data);
   const filename = vcardFilename(data);
   const openButton = canOpen
     ? `<button class="btn btn-secondary" id="${prefix}-open-vcard-btn" type="button">${esc(t("openWithApps"))}</button>`
     : "";
   return `
     <div class="vcard-actions${canOpen ? " btn-row" : ""}">
-      <a class="btn btn-primary${canOpen ? "" : " btn-block"}" id="${prefix}-download-vcard-link" href="${esc(href)}" download="${esc(filename)}" type="text/vcard">${esc(t("downloadVCard"))}</a>
+      <a class="btn btn-primary${canOpen ? "" : " btn-block"}" id="${prefix}-download-vcard-link" href="#" download="${esc(filename)}" type="text/vcard">${esc(t("downloadVCard"))}</a>
       ${openButton}
     </div>
   `;
+}
+
+function wireVCardDownloadLink(data: CardData, prefix: string): void {
+  document.getElementById(`${prefix}-download-vcard-link`)?.addEventListener("click", (event) => {
+    const link = event.currentTarget as HTMLAnchorElement;
+    if (link.href.startsWith("blob:")) return;
+    const url = vcardBlobUrl(data);
+    link.href = url;
+    window.setTimeout(() => {
+      if (link.href === url) link.href = "#";
+      URL.revokeObjectURL(url);
+    }, 60_000);
+  });
 }
 
 function ownCardCtaHtml(): string {
@@ -764,6 +829,7 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
     return;
   }
 
+  wireVCardDownloadLink(data, "recipient");
   document.getElementById("recipient-open-vcard-btn")?.addEventListener("click", () => void openVCardWithApps(data));
 }
 
@@ -1406,6 +1472,7 @@ async function renderPhotoDetail(entry: ReceivedEntry, autoScan = false): Promis
   });
 
   if (hasRecognizedContact) {
+    wireVCardDownloadLink(entry.data, "photo");
     document.getElementById("photo-open-vcard-btn")?.addEventListener("click", () => void openVCardWithApps(entry.data));
   }
 
@@ -1708,12 +1775,6 @@ function renderExportDataPage(): void {
     }
   });
 }
-
-// Version/license/copyright boilerplate is kept in a single fixed language
-// here rather than run through t() — same reasoning as the brand names
-// elsewhere: this is legal/attribution text, not conversational UI copy,
-// and most apps show it untranslated regardless of locale.
-const APP_VERSION = "0.9.4";
 
 function renderAboutPage(): void {
   currentView = { kind: "other" };

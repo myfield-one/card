@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.5 - 2026-08-07
+
+- Added social handle/ID support, including Bluesky and WhatsApp.
+- Added a card tagline, shown on the card face and exported to vCard NOTE.
+- Refined sharing, vCard handoff, QR sizing, and card typography.
+
 ## 0.9.4 - 2026-08-06
 
 - Improved vCard download compatibility on newer iOS releases by rendering
