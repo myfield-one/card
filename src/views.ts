@@ -580,6 +580,10 @@ export async function renderStack(): Promise<void> {
   currentView = { kind: "mine-stack" };
   const mine = await loadMine();
 
+  const homeHintHtml = mine.length
+    ? `<p class="home-guidance">${esc(t("homeShareHint"))}</p>`
+    : `<p class="home-guidance">${esc(t("homeSyncHint"))} <button type="button" class="inline-link-btn" id="home-sync-tip-btn">${esc(t("syncSettings"))}</button></p>`;
+
   const bodyHtml = mine.length
     ? (() => {
         // Move the last-opened card to the end of the stack so it lands
@@ -607,7 +611,10 @@ export async function renderStack(): Promise<void> {
         `;
       })()
     : `
-        <p class="list-empty">${esc(t("noCardYet"))}</p>
+        <button type="button" class="empty-card-placeholder" id="stack-new-card-placeholder">
+          <span class="empty-card-plus" aria-hidden="true">+</span>
+          <span>${esc(t("newCard"))}</span>
+        </button>
         <button type="button" class="btn btn-primary btn-block" id="stack-new-card-btn">${esc(t("createYourCard"))}</button>
       `;
 
@@ -620,7 +627,7 @@ export async function renderStack(): Promise<void> {
       </div>
     </div>
     ${bodyHtml}
-    <p class="home-bookmark-hint">Bookmark this page to quickly share your card and view received cards.</p>
+    ${homeHintHtml}
   `;
   stage.querySelectorAll<HTMLButtonElement>("[data-open-mine]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -629,6 +636,8 @@ export async function renderStack(): Promise<void> {
     });
   });
   document.getElementById("stack-new-card-btn")!.addEventListener("click", () => void renderEditor(null));
+  document.getElementById("stack-new-card-placeholder")?.addEventListener("click", () => void renderEditor(null));
+  document.getElementById("home-sync-tip-btn")?.addEventListener("click", () => void renderSyncPage());
   document.getElementById("received-entry-btn")!.addEventListener("click", () => void renderReceivedPage());
   document.getElementById("more-menu-btn")!.addEventListener("click", () => openMoreMenu());
 
@@ -753,17 +762,23 @@ function wireVCardDownloadLink(data: CardData, prefix: string): void {
   });
 }
 
-function ownCardCtaHtml(): string {
-  return `<a class="own-card-cta" href="${location.pathname}">${esc(t("makeYourOwnCard"))} &rarr;</a>`;
-}
-
-function recipientLocalNavHtml(): string {
+function recipientLocalNavHtml(ownCardLabel: string): string {
   return `
     <div class="btn-row recipient-local-nav">
-      <button type="button" class="btn btn-secondary" id="recipient-home-btn">${esc(t("myCard"))}</button>
+      <button type="button" class="btn btn-secondary" id="recipient-home-btn">${esc(ownCardLabel)}</button>
       <button type="button" class="btn btn-secondary" id="recipient-received-btn">${esc(t("receivedCards"))}</button>
     </div>
   `;
+}
+
+function goToStackRoot(): void {
+  history.replaceState(null, "", location.pathname);
+  void renderStack();
+}
+
+function goToReceivedRoot(): void {
+  history.replaceState(null, "", location.pathname);
+  void renderReceivedPage();
 }
 
 export interface RecipientOpts {
@@ -771,10 +786,13 @@ export interface RecipientOpts {
   entryId?: string;
 }
 
-export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void {
+export async function renderRecipient(data: CardData, opts: RecipientOpts = {}): Promise<void> {
   currentView = opts.entryId ? { kind: "received-detail", id: opts.entryId } : { kind: "other" };
   scrollToTop();
   const inApp = isInAppBrowser(navigator.userAgent);
+  const hasOwnCard = (await loadMine()).length > 0;
+  const ownCardLabel = hasOwnCard ? t("myCardAction") : t("createMyCard");
+  const canOpen = canOpenVCardWithApps(data);
   const saveActionHtml = inApp
     ? `
       <div class="save-fallback">
@@ -785,28 +803,32 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
     : vcardActionsHtml(data, "recipient");
 
   stage.innerHTML = `
-    ${opts.onBack ? `<div class="top-bar top-bar-back"><button type="button" class="icon-btn" id="recipient-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button></div>` : ""}
+    <div class="top-bar top-bar-back top-bar-split">
+      <div class="top-bar-left">
+        ${opts.onBack ? `<button type="button" class="icon-btn" id="recipient-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>` : ""}
+      </div>
+      <div class="top-bar-actions">
+        <button type="button" class="icon-btn" id="recipient-more-menu-btn" aria-label="${esc(t("more"))}">&bull;&bull;&bull;</button>
+      </div>
+    </div>
     ${cardFaceHtml(data)}
     ${contactSheetHtml(data)}
     ${saveActionHtml}
     ${opts.entryId ? `<button type="button" class="form-delete-btn" id="recipient-delete-btn">${esc(t("deleteThisCard"))}</button>` : ""}
-    ${opts.onBack ? "" : recipientLocalNavHtml()}
-    ${opts.onBack ? "" : ownCardCtaHtml()}
+    ${opts.onBack ? "" : recipientLocalNavHtml(ownCardLabel)}
     <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">Myfield</a></div>
   `;
 
   if (opts.onBack) {
     document.getElementById("recipient-back-btn")!.addEventListener("click", opts.onBack);
   } else {
-    document.getElementById("recipient-home-btn")!.addEventListener("click", () => {
-      history.replaceState(null, "", location.pathname);
-      void renderStack();
-    });
-    document.getElementById("recipient-received-btn")!.addEventListener("click", () => {
-      history.replaceState(null, "", location.pathname);
-      void renderReceivedPage();
-    });
+    document.getElementById("recipient-home-btn")!.addEventListener("click", goToStackRoot);
+    document.getElementById("recipient-received-btn")!.addEventListener("click", goToReceivedRoot);
   }
+
+  document.getElementById("recipient-more-menu-btn")!.addEventListener("click", () => {
+    openRecipientMoreMenu(data, { canOpen, inApp, ownCardLabel });
+  });
 
   document.getElementById("recipient-delete-btn")?.addEventListener("click", async () => {
     if (!opts.entryId) return;
@@ -833,16 +855,25 @@ export function renderRecipient(data: CardData, opts: RecipientOpts = {}): void 
   document.getElementById("recipient-open-vcard-btn")?.addEventListener("click", () => void openVCardWithApps(data));
 }
 
-export function renderError(): void {
+export async function renderError(): Promise<void> {
   currentView = { kind: "other" };
+  const hasOwnCard = (await loadMine()).length > 0;
+  const hasReceivedCards = (await loadReceived()).length > 0;
+  const ownCardLabel = hasOwnCard ? t("myCardAction") : t("createMyCard");
   stage.innerHTML = `
     <div class="error-panel">
       <h1>${esc(t("linkUnreadableTitle"))}</h1>
       <p>${esc(t("linkUnreadableBody"))}</p>
+      <p>${esc(t("linkRecoveryHint"))}</p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="error-home-btn">${esc(ownCardLabel)}</button>
+        ${hasReceivedCards ? `<button type="button" class="btn btn-secondary" id="error-received-btn">${esc(t("receivedCards"))}</button>` : ""}
+      </div>
     </div>
-    ${ownCardCtaHtml()}
     <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">Myfield</a></div>
   `;
+  document.getElementById("error-home-btn")!.addEventListener("click", goToStackRoot);
+  document.getElementById("error-received-btn")?.addEventListener("click", goToReceivedRoot);
 }
 
 /* ============ "more" dropdown menu (anchored, not a sheet) ============ */
@@ -857,7 +888,7 @@ function closeMoreMenu(): void {
 function onMoreMenuOutsideClick(e: MouseEvent): void {
   const menu = document.getElementById("more-dropdown");
   const target = e.target as HTMLElement;
-  if (menu && !menu.contains(target) && target.id !== "more-menu-btn") closeMoreMenu();
+  if (menu && !menu.contains(target) && target.id !== "more-menu-btn" && target.id !== "recipient-more-menu-btn") closeMoreMenu();
 }
 
 function onMoreMenuKeydown(e: KeyboardEvent): void {
@@ -883,6 +914,46 @@ function openMoreMenu(): void {
     renderSettingsPage();
   });
   // deferred so the click that opened the menu doesn't immediately close it
+  setTimeout(() => document.addEventListener("click", onMoreMenuOutsideClick), 0);
+  document.addEventListener("keydown", onMoreMenuKeydown);
+}
+
+function openRecipientMoreMenu(data: CardData, opts: { canOpen: boolean; inApp: boolean; ownCardLabel: string }): void {
+  if (document.getElementById("more-dropdown")) {
+    closeMoreMenu();
+    return;
+  }
+  const anchor = document.getElementById("recipient-more-menu-btn")!.parentElement!;
+  const filename = vcardFilename(data);
+  const saveItems = opts.inApp
+    ? ""
+    : `
+      <a role="menuitem" id="recipient-menu-download-vcard-link" href="#" download="${esc(filename)}" type="text/vcard">${esc(t("downloadVCard"))}</a>
+      ${opts.canOpen ? `<button type="button" role="menuitem" id="recipient-menu-open-vcard-btn">${esc(t("openWithApps"))}</button>` : ""}
+    `;
+  const menu = document.createElement("div");
+  menu.className = "dropdown-menu";
+  menu.id = "more-dropdown";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML = `
+    ${saveItems}
+    <button type="button" role="menuitem" id="recipient-menu-home-btn">${esc(opts.ownCardLabel)}</button>
+    <button type="button" role="menuitem" id="recipient-menu-received-btn">${esc(t("receivedCards"))}</button>
+  `;
+  anchor.appendChild(menu);
+  if (!opts.inApp) wireVCardDownloadLink(data, "recipient-menu");
+  menu.querySelector("#recipient-menu-open-vcard-btn")?.addEventListener("click", () => {
+    closeMoreMenu();
+    void openVCardWithApps(data);
+  });
+  menu.querySelector("#recipient-menu-home-btn")!.addEventListener("click", () => {
+    closeMoreMenu();
+    goToStackRoot();
+  });
+  menu.querySelector("#recipient-menu-received-btn")!.addEventListener("click", () => {
+    closeMoreMenu();
+    goToReceivedRoot();
+  });
   setTimeout(() => document.addEventListener("click", onMoreMenuOutsideClick), 0);
   document.addEventListener("keydown", onMoreMenuKeydown);
 }
@@ -1028,7 +1099,7 @@ export async function renderReceivedPage(): Promise<void> {
       if (!entry) return;
       captureReceivedPageSnapshot(received);
       if (cardPhotoAsset(entry.data)) void renderPhotoDetail(entry);
-      else renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
+      else void renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
     });
   });
   void hydrateReceivedPhotoFaces(received);
@@ -1108,7 +1179,7 @@ async function refreshCurrentViewAfterSync(): Promise<void> {
       return;
     }
     if (cardPhotoAsset(entry.data)) await renderPhotoDetail(entry);
-    else renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
+    else await renderRecipient(entry.data, { onBack: restoreOrRenderReceivedPage, entryId: entry.id });
   }
 }
 
@@ -2005,9 +2076,9 @@ export async function initApp(): Promise<void> {
       scheduleCardSyncPush();
       startBackgroundCardSync();
       invalidateReceivedPageSnapshot();
-      renderRecipient(data);
+      await renderRecipient(data);
     } catch {
-      renderError();
+      await renderError();
     }
     return;
   }

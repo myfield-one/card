@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.6 - 2026-08-07
+
+- Improved recipient-page actions, empty-card guidance, and unreadable-link recovery.
+- Improved long contact-field rendering and card text overflow handling.
+- Added QR-sharing fallback messaging for cards that are too large for QR codes.
+- Completed translations for new UI copy and localized Sync wording.
+
 ## 0.9.5 - 2026-08-07
 
 - Added social handle/ID support, including Bluesky and WhatsApp.

@@ -197,6 +197,20 @@ body {
   width: 100%;
   height: auto;
 }
+.card-back-qr-fallback {
+  position: absolute;
+  right: 9%;
+  bottom: clamp(28px, 9cqw, 38px);
+  left: 9%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: color-mix(in srgb, var(--card-ink) 78%, transparent);
+  font-size: clamp(11px, 3.25cqw, 13px);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}
 .photo-card-face {
   padding: 0;
 }
@@ -275,14 +289,19 @@ body {
   text-overflow: ellipsis;
 }
 .card-body {
+  min-width: 0;
+  width: 100%;
   margin: auto 0;
   text-align: center;
 }
 .card-name {
+  overflow: hidden;
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   font-size: clamp(17px, 7cqw, 27px);
   font-weight: 600;
   line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card-name.placeholder {
   /* Derived from --card-ink (not a fixed rgba) so it stays legible across
@@ -290,10 +309,13 @@ body {
   color: color-mix(in srgb, var(--card-ink) 38%, transparent);
 }
 .card-role {
+  overflow: hidden;
   font-size: 13px;
   color: color-mix(in srgb, var(--card-ink) 85%, transparent);
   min-height: 16px;
   margin-top: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card-tagline {
   position: absolute;
@@ -527,6 +549,8 @@ body {
 
 /* ---- buttons ---- */
 .btn {
+  max-width: 100%;
+  overflow: hidden;
   font: inherit;
   font-size: 15px;
   font-weight: 600;
@@ -536,6 +560,8 @@ body {
   cursor: pointer;
   text-decoration: none;
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .btn-primary {
   background: var(--accent);
@@ -556,6 +582,7 @@ body {
 }
 .btn-row .btn {
   flex: 1;
+  min-width: 0;
 }
 /* `display: flex` above has the same specificity as the UA stylesheet's
    `[hidden] { display: none }` and wins the tie (author beats UA
@@ -577,7 +604,7 @@ body {
   margin-top: 28px;
 }
 .vcard-actions {
-  margin-top: 28px;
+  margin-top: 24px;
 }
 .form-delete-btn {
   display: block;
@@ -684,9 +711,11 @@ body {
   box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.65);
   z-index: 40;
 }
-.dropdown-menu button {
+.dropdown-menu button,
+.dropdown-menu a {
   display: block;
   width: 100%;
+  overflow: hidden;
   text-align: left;
   padding: 10px 12px;
   border: none;
@@ -696,8 +725,12 @@ body {
   font-size: 14px;
   border-radius: 8px;
   cursor: pointer;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dropdown-menu button:hover {
+.dropdown-menu button:hover,
+.dropdown-menu a:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -802,10 +835,11 @@ body {
   font-weight: 600;
 }
 .sheet-url-link {
-  display: block;
+  display: inline-block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: bottom;
   white-space: nowrap;
 }
 .about-panel {
@@ -938,13 +972,21 @@ body {
   gap: 8px;
   min-height: 38px;
 }
-.home-bookmark-hint {
-  margin: auto 12px 0;
-  padding-top: 28px;
+.home-guidance {
+  margin: 18px 12px 56px;
   text-align: center;
   font-size: 12.5px;
   line-height: 1.45;
   color: rgba(241, 239, 232, 0.42);
+}
+.inline-link-btn {
+  border: none;
+  background: none;
+  color: var(--accent-bright);
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
 }
 /* Every icon here is a hand-drawn CSS shape, not from an icon set or SVG
    asset: bold solid fills read more clearly at 16-18px on a dark
@@ -1074,13 +1116,38 @@ body {
   color: var(--accent-bright);
   border-color: var(--accent);
 }
+.empty-card-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 85.6 / 54;
+  margin-top: 20px;
+  border: 1.5px dashed var(--stage-line);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
+    transparent;
+  color: rgba(241, 239, 232, 0.55);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.empty-card-plus {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--accent-bright);
+  font-size: 34px;
+  line-height: 1;
+}
 
 /* ---- contact sheet (owner saved view + recipient view) ---- */
 .sheet-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(92px, 28%) minmax(0, 1fr);
   align-items: baseline;
-  gap: 14px;
+  column-gap: 14px;
   padding: 13px 0;
   border-top: 1px solid var(--stage-line);
 }
@@ -1088,14 +1155,26 @@ body {
   border-top: none;
 }
 .sheet-row dt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: rgba(241, 239, 232, 0.5);
-  flex: 0 0 auto;
 }
 .sheet-row dd {
+  min-width: 0;
   margin: 0;
   text-align: right;
   font-size: 14.5px;
+}
+.sheet-value-clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-value-wrap {
+  overflow-wrap: anywhere;
 }
 .sheet-row a {
   color: var(--text);
@@ -1151,14 +1230,6 @@ dl.sheet {
   transform: translateX(-50%) translateY(-6px);
 }
 
-.own-card-cta {
-  display: block;
-  text-align: center;
-  margin-top: 22px;
-  font-size: 13.5px;
-  color: var(--accent-bright);
-  text-decoration: none;
-}
 .save-fallback {
   margin-top: 28px;
 }

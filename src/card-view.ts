@@ -224,26 +224,26 @@ export function identitySummaryHtml(data: ContactInfo): string {
 export function contactSheetHtml(data: CardData): string {
   const rows: string[] = [];
   if (data.contact.department) {
-    rows.push(`<div class="sheet-row"><dt>${esc(t("department"))}</dt><dd>${esc(data.contact.department)}</dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(t("department"))}</dt><dd class="sheet-value-clip" title="${esc(data.contact.department)}">${esc(data.contact.department)}</dd></div>`);
   }
   for (const phone of data.contact.phones || []) {
-    rows.push(`<div class="sheet-row"><dt>${esc(t("phone"))}</dt><dd><a href="tel:${esc(phone.value)}">${esc(phone.value)}</a></dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(t("phone"))}</dt><dd class="sheet-value-clip"><a class="sheet-url-link" href="tel:${esc(phone.value)}" title="${esc(phone.value)}">${esc(phone.value)}</a></dd></div>`);
   }
   for (const email of data.contact.emails || []) {
-    rows.push(`<div class="sheet-row"><dt>${esc(t("email"))}</dt><dd><a href="mailto:${esc(email.value)}">${esc(email.value)}</a></dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(t("email"))}</dt><dd class="sheet-value-clip"><a class="sheet-url-link" href="mailto:${esc(email.value)}" title="${esc(email.value)}">${esc(email.value)}</a></dd></div>`);
   }
   for (const address of data.contact.addresses || []) {
-    rows.push(`<div class="sheet-row"><dt>${esc(t("address"))}</dt><dd>${esc(address.value)}</dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(t("address"))}</dt><dd class="sheet-value-wrap">${esc(address.value)}</dd></div>`);
   }
   for (const url of data.contact.urls || []) {
     const resolved = resolveSocialUrl(url.label, url.value);
     const shown = resolved.href
       ? `<a class="sheet-url-link" href="${esc(resolved.href)}" title="${esc(resolved.href)}" target="_blank" rel="noopener">${esc(resolved.display)}</a>`
       : esc(resolved.display);
-    rows.push(`<div class="sheet-row"><dt>${esc(url.label || "Website")}</dt><dd>${shown}</dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(url.label || "Website")}</dt><dd class="sheet-value-clip" title="${esc(resolved.display)}">${shown}</dd></div>`);
   }
   if (data.contact.note) {
-    rows.push(`<div class="sheet-row"><dt>${esc(t("note"))}</dt><dd>${esc(data.contact.note)}</dd></div>`);
+    rows.push(`<div class="sheet-row"><dt>${esc(t("note"))}</dt><dd class="sheet-value-wrap">${esc(data.contact.note)}</dd></div>`);
   }
   if (!rows.length) return "";
   return `<dl class="sheet panel">${rows.join("")}</dl>`;

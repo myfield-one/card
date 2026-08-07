@@ -19,6 +19,19 @@ function qrSvg(url: string): string {
   return qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
 }
 
+function qrBackContentHtml(url: string): string {
+  try {
+    return `<button type="button" class="card-back-qr" id="card-back-qr-btn" aria-label="${esc(t("zoomQrCode"))}">${qrSvg(url)}</button>`;
+  } catch {
+    return `
+      <div class="card-back-qr-fallback" role="status">
+        <span>${esc(t("qrTooLargeLine1"))}</span>
+        <span>${esc(t("qrTooLargeLine2"))}</span>
+      </div>
+    `;
+  }
+}
+
 // Rendered into the same `.card-flip` slot as the front `.card-face` (see
 // views.ts's renderDetail) — reuses the `card-face` class so it keeps the
 // same ID-1 card size/border/shadow and that theme's colors, with
@@ -37,7 +50,7 @@ export function shareBackHtml(url: string, theme: CardTheme = "beige", customCol
   return `
     <div class="card-face card-back${displayName ? " card-back-with-name" : ""}"${themeAttrs}${styleAttr}>
       ${displayName ? `<div class="card-back-name">${esc(displayName)}</div>` : ""}
-      <button type="button" class="card-back-qr" id="card-back-qr-btn" aria-label="${esc(t("zoomQrCode"))}">${qrSvg(url)}</button>
+      ${qrBackContentHtml(url)}
     </div>
   `;
 }
