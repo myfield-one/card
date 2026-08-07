@@ -588,6 +588,17 @@ function wireStackHeader(): void {
   document.getElementById("more-menu-btn")!.addEventListener("click", () => openMoreMenu());
 }
 
+function homeInstallHintKey(): "homeInstallHint" | "homeInstallHintiOS" | "homeInstallHintMacSafari" {
+  const ua = navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (isIos) return "homeInstallHintiOS";
+
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|Edg|FxiOS/i.test(ua);
+  if (isSafari && /Macintosh|Mac OS X/i.test(ua)) return "homeInstallHintMacSafari";
+
+  return "homeInstallHint";
+}
+
 // No more "redirect straight into the editor when there are no cards yet" —
 // that skipped the home screen entirely on a brand-new install, left the
 // first-ever editor with no way back (see canGoBack's old gating), and made
@@ -607,7 +618,7 @@ export async function renderStack(): Promise<void> {
   if (seq !== stackRenderSeq || currentView.kind !== "mine-stack") return;
 
   const homeHintHtml = mine.length
-    ? `<p class="home-guidance">${esc(t("homeShareHint"))}</p>`
+    ? `<p class="home-guidance">${esc(t(homeInstallHintKey()))}</p>`
     : `<p class="home-guidance">${esc(t("homeSyncHint"))} <button type="button" class="inline-link-btn" id="home-sync-tip-btn">${esc(t("syncSettings"))}</button></p>`;
 
   const bodyHtml = mine.length
@@ -1165,6 +1176,7 @@ const FIELD_TYPES: FieldType[] = ["name", "title", "department", "company", "pho
 const CONTACT_VALUE_TYPES = new Set<ContactValueType>(["work", "home", "mobile", "main", "other"]);
 const CARD_SYNC_PUSH_DEBOUNCE_MS = 1000;
 const CARD_SYNC_PUSH_MAX_WAIT_MS = 5000;
+const CARD_SYNC_RECOVERY_COOLDOWN_MS = 15_000;
 let cardSyncController: ReturnType<typeof createCardSyncController> | null = null;
 let cardSyncHintsStarted = false;
 let cardSyncPushDebounceTimer: number | null = null;
@@ -1173,6 +1185,8 @@ let cardSyncPushing = false;
 let cardSyncPushPending = false;
 let cardSyncPushRequested = false;
 let cardSyncBootstrapPromise: Promise<void> | null = null;
+let cardSyncRecoveryListenersStarted = false;
+let lastCardSyncRecoveryAt = 0;
 
 async function refreshCurrentViewAfterSync(): Promise<void> {
   invalidateReceivedPageSnapshot();
@@ -1306,6 +1320,22 @@ function startBackgroundCardSync(): void {
     await bootstrapCardSync();
     if (cardSyncController) await runCardSyncNow();
   })();
+}
+
+function startCardSyncRecovery(): void {
+  const now = Date.now();
+  if (now - lastCardSyncRecoveryAt < CARD_SYNC_RECOVERY_COOLDOWN_MS) return;
+  lastCardSyncRecoveryAt = now;
+  startBackgroundCardSync();
+}
+
+function startCardSyncRecoveryListeners(): void {
+  if (cardSyncRecoveryListenersStarted) return;
+  cardSyncRecoveryListenersStarted = true;
+  window.addEventListener("online", startCardSyncRecovery);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") startCardSyncRecovery();
+  });
 }
 
 function fieldTypeLabel(type: FieldType): string {
@@ -2058,6 +2088,7 @@ function renderLanguagePage(): void {
 /* ============ entry ============ */
 
 export async function initApp(): Promise<void> {
+  startCardSyncRecoveryListeners();
   const syncCallback = await handleCardSyncAuthCallback();
   if (syncCallback === "approved") {
     await renderStack();
