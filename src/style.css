@@ -1141,6 +1141,16 @@ body {
   font-size: 34px;
   line-height: 1;
 }
+.stack-loading-placeholder {
+  width: 100%;
+  aspect-ratio: 85.6 / 54;
+  margin-top: 20px;
+  border: 1.5px solid var(--stage-line);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    transparent;
+}
 
 /* ---- contact sheet (owner saved view + recipient view) ---- */
 .sheet-row {

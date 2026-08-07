@@ -1,6 +1,8 @@
 import { initApp } from "./views";
+import { registerServiceWorker } from "./pwa";
 
 void initApp();
+registerServiceWorker();
 
 // Navigating to a URL that differs only by its fragment (e.g. this same
 // origin's own "Make your own Card" link, which points at the bare path

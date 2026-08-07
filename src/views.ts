@@ -569,6 +569,24 @@ export function renderDetail(data: MineCard): void {
 /* ============ stack (home) — Mine cards, Wallet-style cascade ============ */
 
 let onboardingDismissedThisPageLoad = false;
+let stackRenderSeq = 0;
+
+function stackHeaderHtml(): string {
+  return `
+    <div class="stack-header">
+      <span class="stack-title">${esc(t("myCard"))}</span>
+      <div class="stack-header-actions">
+        <button type="button" class="icon-btn" id="received-entry-btn" aria-label="${esc(t("receivedCards"))}"><span class="wallet-icon" aria-hidden="true"></span></button>
+        <button type="button" class="icon-btn" id="more-menu-btn" aria-label="${esc(t("more"))}">&bull;&bull;&bull;</button>
+      </div>
+    </div>
+  `;
+}
+
+function wireStackHeader(): void {
+  document.getElementById("received-entry-btn")!.addEventListener("click", () => void renderReceivedPage());
+  document.getElementById("more-menu-btn")!.addEventListener("click", () => openMoreMenu());
+}
 
 // No more "redirect straight into the editor when there are no cards yet" —
 // that skipped the home screen entirely on a brand-new install, left the
@@ -577,8 +595,16 @@ let onboardingDismissedThisPageLoad = false;
 // instead of the home screen it actually points at. An empty home screen
 // with its own "create your card" CTA fixes all three at once.
 export async function renderStack(): Promise<void> {
+  const seq = ++stackRenderSeq;
   currentView = { kind: "mine-stack" };
+  stage.innerHTML = `
+    ${stackHeaderHtml()}
+    <div class="stack-loading-placeholder" aria-hidden="true"></div>
+  `;
+  wireStackHeader();
+
   const mine = await loadMine();
+  if (seq !== stackRenderSeq || currentView.kind !== "mine-stack") return;
 
   const homeHintHtml = mine.length
     ? `<p class="home-guidance">${esc(t("homeShareHint"))}</p>`
@@ -619,13 +645,7 @@ export async function renderStack(): Promise<void> {
       `;
 
   stage.innerHTML = `
-    <div class="stack-header">
-      <span class="stack-title">${esc(t("myCard"))}</span>
-      <div class="stack-header-actions">
-        <button type="button" class="icon-btn" id="received-entry-btn" aria-label="${esc(t("receivedCards"))}"><span class="wallet-icon" aria-hidden="true"></span></button>
-        <button type="button" class="icon-btn" id="more-menu-btn" aria-label="${esc(t("more"))}">&bull;&bull;&bull;</button>
-      </div>
-    </div>
+    ${stackHeaderHtml()}
     ${bodyHtml}
     ${homeHintHtml}
   `;
@@ -638,8 +658,7 @@ export async function renderStack(): Promise<void> {
   document.getElementById("stack-new-card-btn")!.addEventListener("click", () => void renderEditor(null));
   document.getElementById("stack-new-card-placeholder")?.addEventListener("click", () => void renderEditor(null));
   document.getElementById("home-sync-tip-btn")?.addEventListener("click", () => void renderSyncPage());
-  document.getElementById("received-entry-btn")!.addEventListener("click", () => void renderReceivedPage());
-  document.getElementById("more-menu-btn")!.addEventListener("click", () => openMoreMenu());
+  wireStackHeader();
 
   if (!hasSeenOnboarding() && !onboardingDismissedThisPageLoad) showOnboarding();
 }
@@ -2041,15 +2060,14 @@ function renderLanguagePage(): void {
 export async function initApp(): Promise<void> {
   const syncCallback = await handleCardSyncAuthCallback();
   if (syncCallback === "approved") {
-    startBackgroundCardSync();
     await renderStack();
+    startBackgroundCardSync();
     return;
   }
   if (syncCallback === "handled") {
     await renderStack();
     return;
   }
-  startBackgroundCardSync();
   const fragment = location.hash.slice(1);
   if (fragment) {
     try {
@@ -2073,14 +2091,14 @@ export async function initApp(): Promise<void> {
       // re-opening the same link (or a re-share after an edit) updates the
       // existing Received Cards entry instead of piling up a new one.
       await addReceived(data);
-      scheduleCardSyncPush();
-      startBackgroundCardSync();
       invalidateReceivedPageSnapshot();
       await renderRecipient(data);
+      scheduleCardSyncPush();
     } catch {
       await renderError();
     }
     return;
   }
   await renderStack();
+  startBackgroundCardSync();
 }

@@ -1,32 +1,28 @@
 export function isSafeUrl(value: string | undefined): boolean {
-  return /^https?:\/\//i.test(value || "");
+  return /^(https?:\/\/|mailto:|tel:|whatsapp:\/\/|tg:\/\/|bsky:\/\/)/i.test(value || "");
 }
 
-// A bare domain (e.g. "linkedin.com/in/jane", no "https://") is the common
-// case for a hand-typed or recognized social/website value, and shouldn't
-// silently render as unclickable plain text. Anchored start-to-end against
-// dot-separated alphanumeric labels plus an optional path, so it can't
-// match anything containing a space or a colon (rules out "javascript:",
-// "mailto:", plain prose, phone numbers, etc.) without needing a separate
-// scheme blocklist.
+// A bare domain (e.g. "example.com", no "https://") is linkified only for
+// Website-style values. Other free-form social values stay literal, and
+// platform handles such as Bluesky's "alice.bsky.social" are resolved by
+// the platform-specific branch instead of being mistaken for a website.
 const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/\S*)?$/i;
-
-export function isLinkableSocialValue(value: string | undefined): boolean {
-  return isSafeUrl(value) || BARE_DOMAIN_RE.test((value || "").trim());
-}
-
-// Only call once isLinkableSocialValue(value) is true: an already-"https?://"
-// value passes through untouched, a bare domain gets "https://" prepended.
-export function toSocialHref(value: string): string {
-  return isSafeUrl(value) ? value : `https://${value.trim()}`;
-}
 
 function canonicalPlatform(label: string | undefined): string {
   return (label || "Website").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function isWebsitePlatform(label: string | undefined): boolean {
+  return canonicalPlatform(label) === "website";
+}
+
 function socialHandle(value: string): string {
   return value.trim().replace(/^@+/, "");
+}
+
+function bareDomainHref(value: string): string | undefined {
+  const trimmed = value.trim();
+  return BARE_DOMAIN_RE.test(trimmed) ? `https://${trimmed}` : undefined;
 }
 
 function prefixedHandle(value: string): string {
@@ -45,10 +41,14 @@ function whatsappNumberUrl(value: string): string | undefined {
 }
 
 function platformUrl(label: string | undefined, value: string): string | undefined {
+  const platform = canonicalPlatform(label);
+  const raw = value.trim();
   const handle = socialHandle(value);
   if (!handle) return undefined;
+  if (handle.includes("/")) return undefined;
+  if (platform !== "bluesky" && !raw.startsWith("@") && BARE_DOMAIN_RE.test(handle)) return undefined;
 
-  switch (canonicalPlatform(label)) {
+  switch (platform) {
     case "linkedin":
       return `https://www.linkedin.com/in/${handle}`;
     case "x":
@@ -84,10 +84,13 @@ export function resolveSocialUrl(label: string | undefined, value: string): Reso
   const trimmed = value.trim();
   if (!trimmed) return { display: "", vcardValue: "" };
 
-  if (isLinkableSocialValue(trimmed)) {
-    const href = toSocialHref(trimmed);
-    const display = canonicalPlatform(label) === "other" ? trimmed : href;
-    return { display, href, vcardValue: href };
+  if (isSafeUrl(trimmed)) {
+    return { display: trimmed, href: trimmed, vcardValue: trimmed };
+  }
+
+  const websiteHref = isWebsitePlatform(label) ? bareDomainHref(trimmed) : undefined;
+  if (websiteHref) {
+    return { display: websiteHref, href: websiteHref, vcardValue: websiteHref };
   }
 
   const href = platformUrl(label, trimmed);

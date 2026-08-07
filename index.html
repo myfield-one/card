@@ -6,6 +6,10 @@
     <title>My Card</title>
     <meta name="description" content="A digital business card." />
     <meta name="theme-color" content="#1b1c22" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="My Card" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="My Card" />
     <meta property="og:title" content="My Card" />
@@ -31,10 +35,20 @@
     <link rel="icon" href="/logo-512.png" type="image/png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" sizes="180x180" />
     <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" sizes="180x180" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div class="stage" id="stage"></div>
+    <div class="stage" id="stage">
+      <div class="stack-header">
+        <span class="stack-title">My Card</span>
+        <div class="stack-header-actions">
+          <button type="button" class="icon-btn" aria-label="Received cards"><span class="wallet-icon" aria-hidden="true"></span></button>
+          <button type="button" class="icon-btn" aria-label="More">&bull;&bull;&bull;</button>
+        </div>
+      </div>
+      <div class="stack-loading-placeholder" aria-hidden="true"></div>
+    </div>
     <div class="toast" id="toast"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -73,6 +73,13 @@ const popupAuth = createInstanceAuthClient({
 });
 
 export async function handleCardSyncAuthCallback(): Promise<"none" | "approved" | "handled"> {
+  const url = new URL(location.href);
+  const hasCallbackParams =
+    url.searchParams.has("mf_request_id") &&
+    url.searchParams.has("state") &&
+    (url.searchParams.has("mf_result") || url.searchParams.has("error"));
+  if (!hasCallbackParams) return "none";
+
   const result = await sameTabAuth.handleCallback(location.href);
   if (!result) return "none";
   history.replaceState(null, "", location.pathname);
