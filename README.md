@@ -36,7 +36,7 @@ development, code layout, and deployment notes.
 
 ## Acknowledgments
 
-Card Field's design is inspired by [Myfield](https://myfield.one): local-first
+Card Field's design is inspired by [MyField](https://myfield.one): local-first
 data, user-held keys, and sharing that does not give the platform access to
 private card contents.
 

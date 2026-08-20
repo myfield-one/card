@@ -846,7 +846,7 @@ export async function renderRecipient(data: CardData, opts: RecipientOpts = {}):
     ${saveActionHtml}
     ${opts.entryId ? `<button type="button" class="form-delete-btn" id="recipient-delete-btn">${esc(t("deleteThisCard"))}</button>` : ""}
     ${opts.onBack ? "" : recipientLocalNavHtml(ownCardLabel)}
-    <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">Myfield</a></div>
+    <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">MyField</a></div>
   `;
 
   if (opts.onBack) {
@@ -900,7 +900,7 @@ export async function renderError(): Promise<void> {
         ${hasReceivedCards ? `<button type="button" class="btn btn-secondary" id="error-received-btn">${esc(t("receivedCards"))}</button>` : ""}
       </div>
     </div>
-    <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">Myfield</a></div>
+    <div class="footer-mark">${esc(t("poweredBy"))} <a href="https://myfield.one" target="_blank" rel="noopener">MyField</a></div>
   `;
   document.getElementById("error-home-btn")!.addEventListener("click", goToStackRoot);
   document.getElementById("error-received-btn")?.addEventListener("click", goToReceivedRoot);
@@ -1904,7 +1904,7 @@ function renderAboutPage(): void {
       <span class="top-bar-title">${esc(t("about"))}</span>
     </div>
     <div class="panel about-panel">
-      <div class="about-app-name">Card Field</div>
+      <div class="about-app-name">Card Field <span class="about-app-brand">by MyField</span></div>
       <div class="about-version">Version ${esc(APP_VERSION)}</div>
       <div class="about-links">
         <a class="about-link" href="https://myfield.one" target="_blank" rel="noopener">myfield.one</a>

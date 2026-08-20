@@ -1,7 +1,7 @@
 {
-  "name": "My Card",
-  "short_name": "My Card",
-  "description": "Card Field: A privacy-first digital business card app by Myfield.",
+  "name": "Card Field",
+  "short_name": "Card Field",
+  "description": "Card Field: A privacy-first digital business card app by MyField.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
