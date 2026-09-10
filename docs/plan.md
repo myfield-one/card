@@ -5,18 +5,19 @@ static app scope.
 
 Future plans:
 
-- [Encrypted Sync](#encrypted-sync)
-- [Card Assets](#card-assets)
+- [Logo / Avatar Support](#logo--avatar-support)
+- [More Contact Fields](#more-contact-fields)
 
-## Encrypted Sync
-
-Add optional multi-device sync using the object model in
-[`sync.md`](sync.md). The first implementation should keep local IndexedDB as
-the app source of truth and sync encrypted `index:cards`, card records, and
-original image assets.
-
-## Card Assets
+## Logo / Avatar Support
 
 Add first-class UI for `avatar` and `logo` assets. These already exist in the
 data model, but the current app only exposes `cardPhoto` through photo-card
 capture and recognition.
+
+## More Contact Fields
+
+Support more of the common contact fields.
+
+## Done
+
+- **Encrypted Sync** — see [`sync.md`](sync.md), shipped in 0.9.3.
