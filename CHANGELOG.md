@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.8-alpha.0 - Unreleased
+
+- Use the MyField SDK for sync authorization and Remote transport. Local cards,
+  encrypted payloads, object IDs and merge rules are unchanged.
+- Keep existing device identities. Existing sync users reconnect once per device
+  after updating and are prompted to do so.
+- Verify commit payloads with SHA-256 hashes and keep local edits when a commit
+  acknowledgement is uncertain.
+- Add support for serving selected earlier versions at `/vVERSION/`.
+
 ## 0.9.7 - 2026-08-07
 
 - Added PWA install support and offline app-shell caching.

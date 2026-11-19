@@ -37,8 +37,9 @@ The first SDK rollout leaves the history list empty and serves the current app
 at `/`.
 
 For a local integration preview, set `VITE_MYFIELD_AUTH_URL` to the test Auth
-page and run `npm run dev`. The SDK uses the API address and bucket from the
-grant. Existing users may need to reconnect once to access their current bucket.
+page (or `VITE_WEB_BASE` to its origin) and run `npm run dev`. The SDK uses the
+API address and bucket from the grant. Existing sync users are prompted to
+reconnect once per device to access their current bucket.
 
 The app deploys as static files. `public/_headers` defines cache policy:
 HTML is revalidated, hashed Vite assets are immutable, and public assets use
