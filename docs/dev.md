@@ -26,13 +26,14 @@ npm run build
 
 The `release` branch is the publishing branch connected to Cloudflare Pages
 automatic deployment. The `main` branch is the primary development branch;
-after an iteration is stable, merge or promote it to `release` to publish.
+after an iteration is stable, merge or promote it to `release` to publish, then
+tag the published commit as `vVERSION`.
 
 The build serves the current app at `/` and versions listed in `releases.json`
-at `/vVERSION/`; add an entry with its full commit only after verifying the
-matching `vVERSION` tag. The list starts empty. Versions share origin storage,
-and the service worker caches only the root shell, so version paths need a
-network connection.
+at `/vVERSION/`, starting with 0.9.7; add an entry with its full commit only
+after verifying the matching `vVERSION` tag. Versions share origin storage, and
+the service worker caches only the root shell, so version paths need a network
+connection.
 
 For a local integration preview, run `npm run dev` with `VITE_MYFIELD_AUTH_URL`
 (or `VITE_WEB_BASE`) pointing at the test Auth. The SDK takes the API address
