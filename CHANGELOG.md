@@ -2,13 +2,9 @@
 
 ## 0.9.8-alpha.0 - Unreleased
 
-- Use the MyField SDK for sync authorization and Remote transport. Local cards,
-  encrypted payloads, object IDs and merge rules are unchanged.
-- Keep existing device identities. Existing sync users reconnect once per device
-  after updating and are prompted to do so.
-- Verify commit payloads with SHA-256 hashes and keep local edits when a commit
-  acknowledgement is uncertain.
-- Add support for serving selected earlier versions at `/vVERSION/`.
+- Switched sync to the MyField SDK; local cards and synced data are unchanged.
+- Existing sync users reconnect once on each device and are prompted to do so.
+- Added support for serving earlier versions at `/vVERSION/`.
 
 ## 0.9.7 - 2026-08-07
 
