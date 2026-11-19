@@ -28,18 +28,15 @@ The `release` branch is the publishing branch connected to Cloudflare Pages
 automatic deployment. The `main` branch is the primary development branch;
 after an iteration is stable, merge or promote it to `release` to publish.
 
-The build serves the working release at `/` and selected historical versions
-at `/vVERSION/`. Add a version and its full commit to `releases.json` after
-verifying the matching `vVERSION` tag. Each historical build uses its own
-lockfile. Versions share origin storage. The service worker caches the root
-app shell only, so history paths are available online after the worker updates.
-The first SDK rollout leaves the history list empty and serves the current app
-at `/`.
+The build serves the current app at `/` and versions listed in `releases.json`
+at `/vVERSION/`; add an entry with its full commit only after verifying the
+matching `vVERSION` tag. The list starts empty. Versions share origin storage,
+and the service worker caches only the root shell, so version paths need a
+network connection.
 
-For a local integration preview, set `VITE_MYFIELD_AUTH_URL` to the test Auth
-page (or `VITE_WEB_BASE` to its origin) and run `npm run dev`. The SDK uses the
-API address and bucket from the grant. Existing sync users are prompted to
-reconnect once per device to access their current bucket.
+For a local integration preview, run `npm run dev` with `VITE_MYFIELD_AUTH_URL`
+(or `VITE_WEB_BASE`) pointing at the test Auth. The SDK takes the API address
+and bucket from the grant; existing sync users reconnect once per device.
 
 The app deploys as static files. `public/_headers` defines cache policy:
 HTML is revalidated, hashed Vite assets are immutable, and public assets use
