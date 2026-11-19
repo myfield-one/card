@@ -1,7 +1,7 @@
-import { ClientError, createInstance } from "@myfield/sdk";
+import { createInstance } from "@myfield/sdk";
 import { BucketSyncClient } from "./bucket-sync-client";
 import { createCardSyncController } from "./card-sync-controller";
-import { readLegacyInstanceKey } from "./instance-auth";
+import { importLegacyIdentity, needsSyncReconnect, readLegacyInstanceKey } from "./instance-auth";
 
 const appId = "card.myfield.one";
 const options = { autoSync: false };
@@ -14,17 +14,7 @@ const instance = createInstance({ appId, authUrl });
 let preparingIdentity: Promise<void> | undefined;
 
 function prepareIdentity(): Promise<void> {
-  preparingIdentity ??= (async () => {
-    if (await instance.getKey()) return;
-    const legacy = await readLegacyInstanceKey(appId);
-    if (!legacy) return;
-    try {
-      await instance.importKey(legacy);
-    } catch (error) {
-      if (!(error instanceof ClientError) || error.code !== "INVALID_INSTANCE_KEY") throw error;
-      console.warn("[sync] Legacy Card key could not be imported");
-    }
-  })().catch((error) => {
+  preparingIdentity ??= importLegacyIdentity(instance, () => readLegacyInstanceKey(appId)).catch((error) => {
     preparingIdentity = undefined;
     throw error;
   });
@@ -65,4 +55,8 @@ export function onCardSyncDisconnected(handler: () => void): () => void {
 
 export async function clearCardSyncAuthorization(): Promise<void> {
   await instance.disconnect();
+}
+
+export function needsCardSyncReconnect(reconnected: boolean, dismissed = false): Promise<boolean> {
+  return needsSyncReconnect(reconnected, dismissed, () => readLegacyInstanceKey(appId));
 }

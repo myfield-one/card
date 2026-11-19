@@ -1,4 +1,4 @@
-import type { InstanceKey } from "@myfield/sdk";
+import { ClientError, type InstanceKey } from "@myfield/sdk";
 
 const database = "mf-auth-v1";
 const store = "instance";
@@ -36,5 +36,38 @@ export async function readLegacyInstanceKey(appId: string): Promise<InstanceKey 
     return { instanceId, signingPublicJwk, signingPrivateKey, wrappingPublicJwk, wrappingPrivateKey, createdAt };
   } finally {
     db.close();
+  }
+}
+
+type IdentityTarget = {
+  getKey(): Promise<InstanceKey | null>;
+  importKey(key: InstanceKey): Promise<void>;
+};
+
+export async function importLegacyIdentity(
+  instance: IdentityTarget,
+  readLegacy: () => Promise<InstanceKey | null>,
+): Promise<void> {
+  if (await instance.getKey()) return;
+  const legacy = await readLegacy();
+  if (!legacy) return;
+  try {
+    await instance.importKey(legacy);
+  } catch (error) {
+    if (!(error instanceof ClientError) || error.code !== "INVALID_INSTANCE_KEY") throw error;
+    console.warn("[sync] Legacy Card key could not be imported");
+  }
+}
+
+export async function needsSyncReconnect(
+  reconnected: boolean,
+  dismissed: boolean,
+  readLegacy: () => Promise<InstanceKey | null>,
+): Promise<boolean> {
+  if (reconnected || dismissed) return false;
+  try {
+    return Boolean(await readLegacy());
+  } catch {
+    return false;
   }
 }

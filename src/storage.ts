@@ -63,6 +63,8 @@ const RECEIVED_LAYOUT_KEY = "mycard.receivedLayout";
 const AI_LANGUAGES_KEY = "mycard.aiLanguages";
 const AI_DOWNLOADED_LANGUAGES_KEY = "mycard.aiDownloadedLanguages";
 const ONBOARDING_SEEN_KEY = "mycard.onboardingSeen";
+const SYNC_RECONNECT_DISMISSED_KEY = "mycard.syncReconnectDismissed";
+const SYNC_RECONNECTED_KEY = "mycard.syncReconnected";
 
 const CARD_DB_NAME = "mycard";
 const CARD_DB_VERSION = 4;
@@ -502,6 +504,22 @@ export function hasSeenOnboarding(): boolean {
 
 export function markOnboardingSeen(): void {
   localStorage.setItem(ONBOARDING_SEEN_KEY, "1");
+}
+
+export function hasDismissedSyncReconnect(): boolean {
+  return localStorage.getItem(SYNC_RECONNECT_DISMISSED_KEY) === "1";
+}
+
+export function markSyncReconnectDismissed(): void {
+  localStorage.setItem(SYNC_RECONNECT_DISMISSED_KEY, "1");
+}
+
+export function hasReconnectedSync(): boolean {
+  return localStorage.getItem(SYNC_RECONNECTED_KEY) === "1";
+}
+
+export function markSyncReconnected(): void {
+  localStorage.setItem(SYNC_RECONNECTED_KEY, "1");
 }
 
 // Local business-card recognition (see recognizer.ts/ocr.ts) — off by

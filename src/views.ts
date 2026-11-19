@@ -49,8 +49,12 @@ import {
   loadDownloadedAiLanguages,
   markAiLanguageDownloaded,
   defaultAiLanguagesForLocale,
+  hasDismissedSyncReconnect,
+  hasReconnectedSync,
   hasSeenOnboarding,
   markOnboardingSeen,
+  markSyncReconnectDismissed,
+  markSyncReconnected,
 } from "./storage";
 import { warmUpOcrLanguages, recognizeCardImage, cropToCardFrame } from "./ocr";
 import { parseContactFields, type RecognizedField, type FieldType } from "./recognizer";
@@ -61,6 +65,7 @@ import {
   clearCardSyncAuthorization,
   connectCardSync,
   handleCardSyncAuthCallback,
+  needsCardSyncReconnect,
   onCardSyncDisconnected,
 } from "./sync/cloud";
 import type { createCardSyncController } from "./sync/card-sync-controller";
@@ -570,6 +575,8 @@ export function renderDetail(data: MineCard): void {
 /* ============ stack (home) — Mine cards, Wallet-style cascade ============ */
 
 let onboardingDismissedThisPageLoad = false;
+let syncReconnectOffered = false;
+let syncReconnectAfterOnboarding = false;
 let stackRenderSeq = 0;
 
 function stackHeaderHtml(): string {
@@ -706,6 +713,10 @@ function showOnboarding(): void {
     onboardingDismissedThisPageLoad = true;
     if (dontShowAgain) markOnboardingSeen();
     document.getElementById("onboarding-overlay")?.remove();
+    if (syncReconnectAfterOnboarding) {
+      syncReconnectAfterOnboarding = false;
+      showSyncReconnectNotice();
+    }
   });
 }
 
@@ -1261,6 +1272,7 @@ async function bootstrapCardSync(): Promise<void> {
     cardSyncBootstrapPromise = (async () => {
       try {
         cardSyncController = await connectCardSync();
+        if (cardSyncController) markSyncReconnected();
         startCardSyncHints();
       } catch (error) {
         // Existing sync context can expire or be cleared server-side. Startup
@@ -1320,11 +1332,59 @@ async function runCardSyncNow(): Promise<void> {
   }
 }
 
-function startBackgroundCardSync(): void {
-  void (async () => {
+function startBackgroundCardSync(): Promise<void> {
+  return (async () => {
     await bootstrapCardSync();
     if (cardSyncController) await runCardSyncNow();
   })();
+}
+
+async function offerSyncReconnect(): Promise<void> {
+  if (syncReconnectOffered) return;
+  syncReconnectOffered = true;
+  const connected = Boolean(cardSyncController) || hasReconnectedSync();
+  if (!await needsCardSyncReconnect(connected, hasDismissedSyncReconnect())) return;
+  if (document.getElementById("onboarding-overlay")) {
+    syncReconnectAfterOnboarding = true;
+    return;
+  }
+  showSyncReconnectNotice();
+}
+
+function showSyncReconnectNotice(): void {
+  stage.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="onboarding-overlay" id="sync-reconnect-overlay">
+        <div class="onboarding-panel">
+          <h2>${esc(t("syncReconnectTitle"))}</h2>
+          <p class="settings-description">${esc(t("syncReconnectRequired"))}</p>
+          <div class="btn-row">
+            <button type="button" class="btn btn-secondary" id="sync-reconnect-later-btn">${esc(t("syncReconnectLater"))}</button>
+            <button type="button" class="btn btn-primary" id="sync-reconnect-btn">${esc(t("syncConnect"))}</button>
+          </div>
+        </div>
+      </div>
+    `,
+  );
+  const close = () => {
+    markSyncReconnectDismissed();
+    document.getElementById("sync-reconnect-overlay")?.remove();
+  };
+  document.getElementById("sync-reconnect-later-btn")!.addEventListener("click", close);
+  document.getElementById("sync-reconnect-btn")!.addEventListener("click", async () => {
+    close();
+    try {
+      await authorizeCardSync();
+      if (await ensureCardSyncController()) {
+        await runCardSyncNow();
+        showToast(t("syncConnected"));
+      }
+    } catch (error) {
+      console.warn("[sync] Card authorization failed", error);
+      showToast(t("syncNeedsAttention"));
+    }
+  });
 }
 
 function startCardSyncRecovery(): void {
@@ -1790,6 +1850,7 @@ async function renderSyncPage(): Promise<void> {
       : status?.connected
         ? t("syncConnected")
         : t("syncLocalOnly");
+  const reconnectRequired = await needsCardSyncReconnect(Boolean(status?.connected) || hasReconnectedSync());
   stage.innerHTML = `
     <div class="top-bar top-bar-back">
       <button type="button" class="icon-btn" id="sync-back-btn" aria-label="${esc(t("back"))}">&lsaquo;</button>
@@ -1803,6 +1864,7 @@ async function renderSyncPage(): Promise<void> {
       </div>
       ${status?.lastSyncedAt ? `<div class="settings-row settings-row-static"><span>${esc(t("syncLastSynced"))}</span><span>${esc(new Date(status.lastSyncedAt).toLocaleString())}</span></div>` : ""}
       ${status?.lastError ? `<p class="settings-description sync-error">${esc(status.lastError)}</p>` : ""}
+      ${reconnectRequired ? `<p class="settings-description">${esc(t("syncReconnectRequired"))}</p>` : ""}
       <div class="btn-row">
         <button type="button" class="btn btn-secondary" id="sync-disconnect-btn"${status?.connected ? "" : " disabled"}>${esc(t("syncDisconnect"))}</button>
         <button type="button" class="btn btn-primary" id="sync-action-btn">${esc(status?.connected ? t("syncNow") : t("syncConnect"))}</button>
@@ -2135,5 +2197,5 @@ export async function initApp(): Promise<void> {
     return;
   }
   await renderStack();
-  startBackgroundCardSync();
+  void startBackgroundCardSync().then(offerSyncReconnect);
 }
