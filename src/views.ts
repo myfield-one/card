@@ -61,6 +61,7 @@ import {
   clearCardSyncAuthorization,
   connectCardSync,
   handleCardSyncAuthCallback,
+  onCardSyncDisconnected,
 } from "./sync/cloud";
 import type { createCardSyncController } from "./sync/card-sync-controller";
 
@@ -1238,12 +1239,16 @@ function startCardSyncHints(): void {
   });
 }
 
-async function resetCardSyncAuthorization(): Promise<void> {
+function disposeCardSyncController(): void {
   clearCardSyncPushTimers();
   cardSyncPushPending = false;
   cardSyncController?.dispose();
   cardSyncController = null;
   cardSyncHintsStarted = false;
+}
+
+async function resetCardSyncAuthorization(): Promise<void> {
+  disposeCardSyncController();
   await clearCardSyncAuthorization();
 }
 
@@ -1332,6 +1337,7 @@ function startCardSyncRecovery(): void {
 function startCardSyncRecoveryListeners(): void {
   if (cardSyncRecoveryListenersStarted) return;
   cardSyncRecoveryListenersStarted = true;
+  onCardSyncDisconnected(disposeCardSyncController);
   window.addEventListener("online", startCardSyncRecovery);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") startCardSyncRecovery();
@@ -1799,26 +1805,24 @@ async function renderSyncPage(): Promise<void> {
       ${status?.lastError ? `<p class="settings-description sync-error">${esc(status.lastError)}</p>` : ""}
       <div class="btn-row">
         <button type="button" class="btn btn-secondary" id="sync-disconnect-btn"${status?.connected ? "" : " disabled"}>${esc(t("syncDisconnect"))}</button>
-        <button type="button" class="btn btn-primary" id="sync-action-btn">${esc(status?.connected && !status.lastError ? t("syncNow") : t("syncConnect"))}</button>
+        <button type="button" class="btn btn-primary" id="sync-action-btn">${esc(status?.connected ? t("syncNow") : t("syncConnect"))}</button>
       </div>
     </div>
   `;
   document.getElementById("sync-back-btn")!.addEventListener("click", () => renderSettingsPage());
   document.getElementById("sync-action-btn")!.addEventListener("click", async () => {
-    if (status?.lastError) {
-      await resetCardSyncAuthorization();
-      await authorizeCardSync();
-      return;
+    try {
+      if (!await ensureCardSyncController()) await authorizeCardSync();
+      if (await ensureCardSyncController()) {
+        showToast(t("syncSyncing"));
+        await runCardSyncNow();
+        const result = cardSyncController?.status();
+        showToast(result?.connected ? t("syncConnected") : t("syncNeedsAttention"));
+      }
+    } catch (error) {
+      console.warn("[sync] Card authorization failed", error);
+      showToast(t("syncNeedsAttention"));
     }
-    const connected = await ensureCardSyncController();
-    if (!connected) {
-      await authorizeCardSync();
-      return;
-    }
-    showToast(t("syncSyncing"));
-    await runCardSyncNow();
-    const result = cardSyncController!.status();
-    showToast(result.lastError ? t("syncNeedsAttention") : t("syncConnected"));
     void renderSyncPage();
   });
   document.getElementById("sync-disconnect-btn")?.addEventListener("click", async () => {

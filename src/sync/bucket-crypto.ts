@@ -14,15 +14,6 @@ export type EncryptedEnvelopeFields = {
   wrappedDEKMeta: { alg: "AES-GCM-KW"; iv: string; keyId: string; bucketId: string; aad: string };
 };
 
-export function fnv1a32Bytes(bytes: Uint8Array): string {
-  let hash = 2166136261;
-  for (let i = 0; i < bytes.length; i += 1) {
-    hash ^= bytes[i] as number;
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
-}
-
 export async function encryptEnvelopeFields(
   key: BucketCryptoKey,
   objectId: string,
