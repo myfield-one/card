@@ -1,4 +1,4 @@
-const CACHE_NAME = "card-field-app-v2";
+const CACHE_NAME = "card-field-app-v3";
 const APP_SHELL = [
   "/index.html",
   "/manifest.webmanifest",
@@ -65,6 +65,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
+    if (url.pathname !== "/" && url.pathname !== "/index.html") return;
     event.respondWith(
       caches.match("/index.html").then((cached) => {
         const fetched = fetch(request)

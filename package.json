@@ -1,13 +1,13 @@
 {
   "name": "@myfield/card",
   "private": true,
-  "version": "0.9.7",
+  "version": "0.9.8-alpha.0",
   "author": "OPENTECH AI PTE. LTD.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build-versions.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts"
@@ -15,5 +15,8 @@
   "devDependencies": {
     "typescript": "5.5.4",
     "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "@myfield/sdk": "0.9.2"
   }
 }

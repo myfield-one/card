@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.8-alpha.0 - Unreleased
+
+- Switched sync to the MyField SDK; local cards and synced data are unchanged.
+- Existing sync users reconnect once on each device and are prompted to do so.
+- Added support for serving earlier versions at `/vVERSION/`.
+
 ## 0.9.7 - 2026-08-07
 
 - Added PWA install support and offline app-shell caching.
